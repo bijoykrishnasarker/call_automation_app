@@ -1,0 +1,325 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { VapiError } from '@vapi-ai/server-sdk';
+import { createSupabaseClientForUser } from '@/lib/supabase/server';
+import { getOrganizationIdForUser } from '@/lib/auth/get-organization-id';
+import { vapi } from '@/lib/vapi/client';
+
+const VAPI_BASE = 'https://api.vapi.ai';
+const GENERIC_ERROR_MESSAGE = 'An unexpected error occurred. Please try again.';
+
+function getAccessToken(request: NextRequest): string | null {
+  const auth = request.headers.get('authorization');
+  if (!auth?.startsWith('Bearer ')) return null;
+  return auth.slice(7).trim() || null;
+}
+
+/** Optional body: frontend may send assistantId and/or areaCode; otherwise we load assistantId from DB */
+interface ProvisionBody {
+  assistantId?: string;
+  areaCode?: string;
+}
+
+/** Normalize area code: digits only, min 3 chars; default "415" */
+function normalizeAreaCode(raw: unknown): string {
+  if (raw != null && typeof raw === 'string') {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 3) return digits.slice(0, 3);
+  }
+  return '415';
+}
+
+/** Response shape from Vapi POST /phone-number/buy (legacy fallback) */
+interface VapiBuyResponse {
+  id?: string;
+  number?: string;
+  [key: string]: unknown;
+}
+
+async function getAssistantId(
+  supabase: Awaited<ReturnType<typeof createSupabaseClientForUser>>,
+  organizationId: string,
+  body: ProvisionBody | null
+): Promise<string | null> {
+  const fromBody = body?.assistantId;
+  if (typeof fromBody === 'string' && fromBody.trim()) return fromBody.trim();
+
+  const { data: assistant } = await supabase
+    .from('vapi_assistants')
+    .select('vapi_assistant_id')
+    .eq('organization_id', organizationId)
+    .eq('is_primary', true)
+    .maybeSingle();
+
+  return assistant?.vapi_assistant_id ?? null;
+}
+
+async function verifyAssistantInVapi(assistantId: string): Promise<{ ok: true } | { ok: false; status: number }> {
+  try {
+    await vapi.assistants.get({ id: assistantId });
+    return { ok: true };
+  } catch (e) {
+    const code = e instanceof VapiError ? e.statusCode : undefined;
+    console.error('[provision] assistants.get failed', e);
+    return { ok: false, status: code ?? 500 };
+  }
+}
+
+/** Preferred: create Vapi number with assistant in one request (SDK POST /phone-number). */
+async function createVapiNumberWithAssistant(
+  areaCode: string,
+  assistantId: string
+): Promise<{ id: string; number: string }> {
+  const created = await vapi.phoneNumbers.create({
+    provider: 'vapi',
+    numberDesiredAreaCode: areaCode,
+    assistantId,
+  });
+  const row = created as { id?: string; number?: string };
+  if (typeof row.id !== 'string' || !row.id) {
+    throw new Error('Vapi create phone response missing id');
+  }
+  if (typeof row.number !== 'string' || !row.number) {
+    throw new Error('Vapi create phone response missing number');
+  }
+  return { id: row.id, number: row.number };
+}
+
+/** Legacy buy then PATCH assistant (some accounts may only support /buy). */
+async function buyPhoneNumberLegacy(apiKey: string, areaCode: string): Promise<{ id: string; number: string }> {
+  const res = await fetch(`${VAPI_BASE}/phone-number/buy`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ areaCode }),
+  });
+
+  const data = (await res.json().catch(() => ({}))) as VapiBuyResponse & { message?: string; error?: string };
+  if (!res.ok) {
+    const msg = data?.message ?? data?.error ?? `Vapi buy failed (${res.status})`;
+    throw new Error(msg);
+  }
+
+  const id = data?.id;
+  const number = data?.number;
+  if (typeof id !== 'string' || !id) throw new Error('Vapi buy response missing phone number id');
+  if (typeof number !== 'string' || !number) throw new Error('Vapi buy response missing phone number');
+
+  return { id, number };
+}
+
+async function patchPhoneAssistant(phoneNumberId: string, assistantId: string): Promise<void> {
+  await vapi.phoneNumbers.update({
+    id: phoneNumberId,
+    body: { assistantId },
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const accessToken = getAccessToken(request);
+  if (!accessToken) {
+    return NextResponse.json(
+      { error: 'Unauthorized', message: 'Authentication required' },
+      { status: 401 }
+    );
+  }
+
+  const supabase = createSupabaseClientForUser(accessToken);
+  const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+  if (userError || !user) {
+    return NextResponse.json(
+      { error: 'Unauthorized', message: 'Authentication required' },
+      { status: 401 }
+    );
+  }
+
+  const organizationId = await getOrganizationIdForUser(supabase, user.id);
+  if (organizationId === null) {
+    return NextResponse.json(
+      { error: 'Forbidden', message: 'No organization access' },
+      { status: 403 }
+    );
+  }
+
+  let body: ProvisionBody | null = null;
+  try {
+    const text = await request.text();
+    if (text.trim()) body = JSON.parse(text) as ProvisionBody;
+  } catch {
+    // optional body; ignore parse errors
+  }
+
+  const assistantId = await getAssistantId(supabase, organizationId, body);
+  if (!assistantId) {
+    return NextResponse.json(
+      {
+        error: 'Bad Request',
+        message:
+          'No assistant on file. Click Save or Sync with Vapi in AI Center, then provision a phone number.',
+      },
+      { status: 400 }
+    );
+  }
+
+  const apiKey = process.env.VAPI_PRIVATE_KEY;
+  if (!apiKey) {
+    console.error('[POST /api/vapi/phone/provision] VAPI_PRIVATE_KEY is not set');
+    return NextResponse.json(
+      { error: 'Internal error', message: GENERIC_ERROR_MESSAGE },
+      { status: 500 }
+    );
+  }
+
+  const verified = await verifyAssistantInVapi(assistantId);
+  if (verified.ok === false) {
+    if (verified.status === 404) {
+      return NextResponse.json(
+        {
+          error: 'Bad Request',
+          message:
+            'Your saved assistant was not found in Vapi. Click Save or Sync with Vapi in AI Center to create or refresh it, then try again.',
+        },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(
+      { error: 'Internal error', message: GENERIC_ERROR_MESSAGE },
+      { status: 500 }
+    );
+  }
+
+  const { data: existingNumber } = await supabase
+    .from('vapi_phone_numbers')
+    .select('id, e164_number')
+    .eq('organization_id', organizationId)
+    .eq('is_primary', true)
+    .maybeSingle();
+
+  if (existingNumber?.e164_number) {
+    return NextResponse.json(
+      {
+        error: 'Already provisioned',
+        message: `Your business already has a phone number: ${existingNumber.e164_number}. Contact support if you need to change it.`,
+        phoneNumber: existingNumber.e164_number,
+      },
+      { status: 409 }
+    );
+  }
+
+  let phoneId: string;
+  let phoneNumber: string;
+  let linkFailed: string | null = null;
+  let linkNote: string | null = null;
+
+  const areaCode = normalizeAreaCode(body?.areaCode);
+
+  try {
+    try {
+      const created = await createVapiNumberWithAssistant(areaCode, assistantId);
+      phoneId = created.id;
+      phoneNumber = created.number;
+      linkNote = 'Number created with assistant attached.';
+    } catch (createErr) {
+      console.warn('[POST /api/vapi/phone/provision] phoneNumbers.create failed, falling back to buy + update', createErr);
+      const buyResult = await buyPhoneNumberLegacy(apiKey, areaCode);
+      phoneId = buyResult.id;
+      phoneNumber = buyResult.number;
+      try {
+        await patchPhoneAssistant(phoneId, assistantId);
+        linkNote = 'Number purchased and linked via update.';
+      } catch (linkErr) {
+        linkFailed = linkErr instanceof Error ? linkErr.message : 'Failed to link assistant to phone number';
+        console.error('[POST /api/vapi/phone/provision] link after buy failed', linkErr);
+      }
+    }
+  } catch (e) {
+    console.error('[POST /api/vapi/phone/provision] vapi error', e);
+    const rawMessage = e instanceof Error ? e.message : GENERIC_ERROR_MESSAGE;
+
+    const isBillingError =
+      rawMessage.toLowerCase().includes('payment') ||
+      rawMessage.toLowerCase().includes('billing') ||
+      rawMessage.toLowerCase().includes('subscription') ||
+      rawMessage.toLowerCase().includes('credit');
+
+    const userMessage = isBillingError
+      ? 'Phone number provisioning is temporarily unavailable. Our team has been notified. Please try again later or contact support.'
+      : rawMessage;
+
+    if (isBillingError) {
+      console.error(
+        '🚨 [BILLING] Vapi account needs a payment method or credits. ' +
+          'Visit https://dashboard.vapi.ai/org/billing to resolve. Raw error:',
+        rawMessage
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Provisioning failed', message: userMessage },
+      { status: isBillingError ? 503 : 400 }
+    );
+  }
+
+  const { data: existing } = await supabase
+    .from('vapi_phone_numbers')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('is_primary', true)
+    .maybeSingle();
+
+  const payload = {
+    organization_id: organizationId,
+    vapi_phone_number_id: phoneId,
+    e164_number: phoneNumber,
+    is_primary: true,
+  };
+
+  let row: { id: string; vapi_phone_number_id: string; e164_number: string; is_primary: boolean; created_at: string };
+  if (existing?.id) {
+    const { data: updated, error: updateError } = await supabase
+      .from('vapi_phone_numbers')
+      .update({
+        vapi_phone_number_id: phoneId,
+        e164_number: phoneNumber,
+      })
+      .eq('id', existing.id)
+      .select('id, vapi_phone_number_id, e164_number, is_primary, created_at')
+      .single();
+    if (updateError) {
+      console.error('[POST /api/vapi/phone/provision] update error', updateError);
+      return NextResponse.json(
+        { error: 'Internal error', message: GENERIC_ERROR_MESSAGE },
+        { status: 500 }
+      );
+    }
+    row = updated;
+  } else {
+    const { data: inserted, error: insertError } = await supabase
+      .from('vapi_phone_numbers')
+      .insert(payload)
+      .select('id, vapi_phone_number_id, e164_number, is_primary, created_at')
+      .single();
+    if (insertError) {
+      console.error('[POST /api/vapi/phone/provision] insert error', insertError);
+      return NextResponse.json(
+        { error: 'Internal error', message: GENERIC_ERROR_MESSAGE },
+        { status: 500 }
+      );
+    }
+    row = inserted;
+  }
+
+  return NextResponse.json({
+    phoneNumber: row.e164_number,
+    details: row,
+    ...(linkNote ? { note: linkNote } : {}),
+    ...(linkFailed
+      ? {
+          warning:
+            'Number purchased and saved, but linking to your assistant failed. Use “Link assistant to number” in AI Center or set the assistant in the Vapi dashboard.',
+          linkError: linkFailed,
+        }
+      : {}),
+  });
+}

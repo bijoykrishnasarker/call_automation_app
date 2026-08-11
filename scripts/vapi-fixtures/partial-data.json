@@ -1,0 +1,21 @@
+{
+  "message": {
+    "type": "tool-calls",
+    "call": {
+      "id": "call_partial_001",
+      "direction": "inbound",
+      "metadata": { "organization_id": "00000000-0000-0000-0000-000000000001" }
+    },
+    "toolCallList": [
+      {
+        "id": "tool_partial_001",
+        "name": "take_message",
+        "parameters": {
+          "name": "Caller",
+          "phone": "1234567899",
+          "message": "Please call me back tomorrow morning"
+        }
+      }
+    ]
+  }
+}

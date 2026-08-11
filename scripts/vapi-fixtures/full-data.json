@@ -1,0 +1,31 @@
+{
+  "message": {
+    "type": "tool-calls",
+    "call": {
+      "id": "call_full_001",
+      "direction": "inbound",
+      "from": { "number": "+15551231234" },
+      "to": { "number": "+15557654321" },
+      "assistantId": "asst_full_001",
+      "metadata": { "organization_id": "00000000-0000-0000-0000-000000000001" },
+      "startedAt": "2026-04-20T19:00:00.000Z",
+      "endedAt": "2026-04-20T19:06:00.000Z"
+    },
+    "toolCallList": [
+      {
+        "id": "tool_full_001",
+        "name": "book_appointment",
+        "parameters": {
+          "customerName": "Dan Milcher",
+          "customerPhone": "+1 (555) 123-1234",
+          "customerEmail": "dan@gmail.com",
+          "startAt": "2026-04-20T16:00:00-04:00",
+          "endAt": "2026-04-20T16:30:00-04:00",
+          "timezone": "America/New_York",
+          "subject": "Consultation for plumbing",
+          "callNotes": "Booked from inbound call"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "message": {
+    "type": "tool-calls",
+    "call": {
+      "id": "call_dst_001",
+      "direction": "inbound",
+      "metadata": { "organization_id": "00000000-0000-0000-0000-000000000001" }
+    },
+    "toolCallList": [
+      {
+        "id": "tool_dst_001",
+        "name": "book_appointment",
+        "parameters": {
+          "customerName": "DST Caller",
+          "customerPhone": "+15550002222",
+          "customerEmail": "dst@example.com",
+          "localDate": "2026-11-01",
+          "localTime": "01:30:00",
+          "timezone": "America/New_York",
+          "durationMinutes": 30,
+          "subject": "DST Consultation"
+        }
+      }
+    ]
+  }
+}
