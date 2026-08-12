@@ -164,18 +164,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!mounted) return;
-      
-      const mappedUser = sessionToUser(session);
-      setUser(mappedUser);
-      
-      if (mappedUser?.id) {
-        await fetchProfile(mappedUser.id);
-      } else {
-        setHasOrganization(true); // Logged out, don't show onboarding
+      try {
+        // Race getSession against a 5-second timeout so the app never
+        // gets permanently stuck on "Loading..." (e.g. corrupt cookie / slow PC).
+        const sessionResult = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<{ data: { session: null } }>((resolve) =>
+            setTimeout(() => resolve({ data: { session: null } }), 5000)
+          ),
+        ]);
+
+        if (!mounted) return;
+
+        const mappedUser = sessionToUser(sessionResult.data.session);
+        setUser(mappedUser);
+
+        if (mappedUser?.id) {
+          await fetchProfile(mappedUser.id);
+        } else {
+          setHasOrganization(true); // Logged out, don't show onboarding
+        }
+      } catch {
+        // If anything fails, let the app render so users see the login page
+        if (!mounted) return;
+      } finally {
+        if (mounted) setIsReady(true);
       }
-      setIsReady(true);
     };
 
     init();
