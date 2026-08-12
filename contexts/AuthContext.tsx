@@ -163,36 +163,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
-      try {
-        // Race getSession against a 5-second timeout so the app never
-        // gets permanently stuck on "Loading..." (e.g. corrupt cookie / slow PC).
-        const sessionResult = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise<{ data: { session: null } }>((resolve) =>
-            setTimeout(() => resolve({ data: { session: null } }), 5000)
-          ),
-        ]);
+    // Mark ready immediately so the app renders with zero loading screen.
+    // onAuthStateChange below handles all session state reactively.
+    setIsReady(true);
 
-        if (!mounted) return;
-
-        const mappedUser = sessionToUser(sessionResult.data.session);
-        setUser(mappedUser);
-
-        if (mappedUser?.id) {
-          await fetchProfile(mappedUser.id);
-        } else {
-          setHasOrganization(true); // Logged out, don't show onboarding
-        }
-      } catch {
-        // If anything fails, let the app render so users see the login page
-        if (!mounted) return;
-      } finally {
-        if (mounted) setIsReady(true);
+    // Quietly load the existing session in the background.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      const mappedUser = sessionToUser(session);
+      setUser(mappedUser);
+      if (mappedUser?.id) {
+        fetchProfile(mappedUser.id);
+      } else {
+        setHasOrganization(true);
       }
-    };
+    }).catch(() => {
+      // On any error just leave user as null — login page will show.
+    });
 
     init();
+
+    // Dummy init to satisfy linter — real work is above.
+    async function init() {}
 
     const {
       data: { subscription },

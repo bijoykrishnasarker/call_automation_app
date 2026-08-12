@@ -57,14 +57,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [user, isReady, isLoginPage, hasOrganization, pathname, router]);
 
-  if (!isReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="animate-pulse text-slate-400">Loading...</div>
-      </div>
-    );
-  }
-
   const isOnboardingPage = pathname === '/onboarding';
 
   if (!user && isLoginPage) {
