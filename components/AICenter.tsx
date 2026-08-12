@@ -1011,15 +1011,26 @@ export const AICenter: React.FC = () => {
                                             To activate your AI receptionist, set up Call Forwarding with your current phone provider. Have them forward missed or unanswered calls directly to the number above.
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleSave}
-                                        disabled={isLoadingInitial || isSaving}
-                                        className="flex items-center gap-2 px-5 py-2.5 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        <Save className="w-4 h-4" />
-                                        {isSaving ? 'Saving…' : 'Save'}
-                                    </button>
+                                    <div className="flex items-center gap-3 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleSave}
+                                            disabled={isLoadingInitial || isSaving}
+                                            className="flex items-center gap-2 px-6 py-3 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-sm"
+                                        >
+                                            {isSaving ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Save className="w-4 h-4" />
+                                            )}
+                                            {isSaving ? 'Saving…' : 'Save'}
+                                        </button>
+                                        {(error || successMessage) && (
+                                            <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${error ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300' : 'bg-lime-50 dark:bg-lime-900/20 border-lime-200 dark:border-lime-800 text-lime-700 dark:text-lime-300'}`}>
+                                                {error ?? successMessage}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
