@@ -132,56 +132,69 @@ export const AICenter: React.FC = () => {
     useEffect(() => {
         let cancelled = false;
         setError(null);
-        (async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) {
-                if (!cancelled) {
-                    setFormData(FORM_DEFAULTS);
-                    setIsLoadingInitial(false);
-                }
-                return;
+        setIsLoadingInitial(true);
+
+        // Safety fallback: Never keep the user waiting more than 2.5s on "Loading configuration..."
+        const safetyTimer = setTimeout(() => {
+            if (!cancelled) {
+                setIsLoadingInitial(false);
             }
+        }, 2500);
+
+        (async () => {
             try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token) {
+                    if (!cancelled) {
+                        setFormData(FORM_DEFAULTS);
+                    }
+                    return;
+                }
                 const { settings, connected_phone_number } = await fetchAiReceptionistSettings(session.access_token);
                 if (!cancelled) {
-                        if (settings === null) {
-                            setFormData(FORM_DEFAULTS);
-                        } else {
-                            setFormData({
-                                ...FORM_DEFAULTS,
-                                isEnabled: settings.is_enabled,
-                                agentName: settings.agent_name,
-                                voiceModel: settings.voice,
-                                voiceSpeed: settings.speed,
-                                transferNumber: settings.live_transfer_number ?? '',
-                                afterHoursOnly: settings.answer_after_hours_only,
-                                businessName: settings.business_name ?? '',
-                                businessType: settings.business_type ?? '',
-                                businessAddress: settings.business_address ?? '',
-                                businessHours: settings.business_hours ?? '',
-                                answerQuestions: settings.can_answer_questions ?? true,
-                                takeMessages: settings.can_take_messages ?? true,
-                                bookAppointments: settings.can_book_appointments ?? false,
-                                transferEnabled: settings.transfer_urgent_calls ?? false,
-                                services: Array.isArray(settings.services) ? settings.services : [],
-                                additionalInfo: settings.additional_business_info ?? '',
-                                greetingMessage: settings.greeting_message ?? '',
-                                phoneNumber: connected_phone_number ?? '',
-                                captureName: true,
-                                capturePhone: true,
-                                captureEmail: true,
-                                requireEmailConfirmation: true,
-                                saveIncompleteAsReview: true,
-                            });
-                        }
+                    if (settings === null) {
+                        setFormData(FORM_DEFAULTS);
+                    } else {
+                        setFormData({
+                            ...FORM_DEFAULTS,
+                            isEnabled: settings.is_enabled,
+                            agentName: settings.agent_name,
+                            voiceModel: settings.voice,
+                            voiceSpeed: settings.speed,
+                            transferNumber: settings.live_transfer_number ?? '',
+                            afterHoursOnly: settings.answer_after_hours_only,
+                            businessName: settings.business_name ?? '',
+                            businessType: settings.business_type ?? '',
+                            businessAddress: settings.business_address ?? '',
+                            businessHours: settings.business_hours ?? '',
+                            answerQuestions: settings.can_answer_questions ?? true,
+                            takeMessages: settings.can_take_messages ?? true,
+                            bookAppointments: settings.can_book_appointments ?? false,
+                            transferEnabled: settings.transfer_urgent_calls ?? false,
+                            services: Array.isArray(settings.services) ? settings.services : [],
+                            additionalInfo: settings.additional_business_info ?? '',
+                            greetingMessage: settings.greeting_message ?? '',
+                            phoneNumber: connected_phone_number ?? '',
+                            captureName: true,
+                            capturePhone: true,
+                            captureEmail: true,
+                            requireEmailConfirmation: true,
+                            saveIncompleteAsReview: true,
+                        });
+                    }
                 }
             } catch (e) {
                 if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load settings');
             } finally {
+                clearTimeout(safetyTimer);
                 if (!cancelled) setIsLoadingInitial(false);
             }
         })();
-        return () => { cancelled = true; };
+
+        return () => {
+            cancelled = true;
+            clearTimeout(safetyTimer);
+        };
     }, []);
 
     // Initialize Vapi Web SDK once (client-side only) and wire call state to UI.
