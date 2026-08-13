@@ -214,7 +214,22 @@ export const AICenter: React.FC = () => {
         const onEnd = () => setIsTestingVoice(false);
         const onError = (err: any) => {
             console.error('Vapi Web SDK Error:', err);
-            const msg = err?.message || err?.error || 'Vapi voice connection failed. Please check microphone permissions or try again.';
+            let msg = 'Vapi voice connection failed. Please check microphone permissions or try again.';
+            if (err) {
+                if (typeof err === 'string') {
+                    msg = err;
+                } else if (err.message && typeof err.message === 'string') {
+                    msg = err.message;
+                } else if (err.error && typeof err.error === 'string') {
+                    msg = err.error;
+                } else {
+                    try {
+                        msg = JSON.stringify(err);
+                    } catch {
+                        msg = String(err);
+                    }
+                }
+            }
             setError(`Vapi Error: ${msg}`);
             setIsTestingVoice(false);
         };
