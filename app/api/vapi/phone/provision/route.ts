@@ -101,29 +101,40 @@ async function createVapiNumberWithAssistant(
   throw lastError;
 }
 
-/** Legacy buy then PATCH assistant (some accounts may only support /buy). */
+/** Fallback: create phone number via new REST API (without SDK) using multiple area codes */
 async function buyPhoneNumberLegacy(apiKey: string, areaCode: string): Promise<{ id: string; number: string }> {
-  const res = await fetch(`${VAPI_BASE}/phone-number/buy`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ areaCode }),
-  });
+  const codesToTry = [areaCode, ...VAPI_AREA_CODE_FALLBACKS.filter(c => c !== areaCode)];
 
-  const data = (await res.json().catch(() => ({}))) as VapiBuyResponse & { message?: string; error?: string };
-  if (!res.ok) {
-    const msg = data?.message ?? data?.error ?? `Vapi buy failed (${res.status})`;
-    throw new Error(msg);
+  for (const code of codesToTry) {
+    const res = await fetch(`${VAPI_BASE}/phone-number`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ provider: 'vapi', numberDesiredAreaCode: code }),
+    });
+
+    const data = (await res.json().catch(() => ({}))) as VapiBuyResponse & { message?: string; error?: string };
+
+    if (!res.ok) {
+      const msg = typeof data?.message === 'string' ? data.message : data?.error ?? `Vapi buy failed (${res.status})`;
+      if (msg.toLowerCase().includes('area code') || msg.toLowerCase().includes('not available')) {
+        console.warn(`[provision-legacy] Area code ${code} not available, trying next`);
+        continue;
+      }
+      throw new Error(msg);
+    }
+
+    const id = data?.id;
+    const number = data?.number;
+    if (typeof id !== 'string' || !id) throw new Error('Vapi phone response missing id');
+    if (typeof number !== 'string' || !number) throw new Error('Vapi phone response missing number');
+    console.log(`[provision-legacy] Phone number created with area code ${code}: ${number}`);
+    return { id, number };
   }
 
-  const id = data?.id;
-  const number = data?.number;
-  if (typeof id !== 'string' || !id) throw new Error('Vapi buy response missing phone number id');
-  if (typeof number !== 'string' || !number) throw new Error('Vapi buy response missing phone number');
-
-  return { id, number };
+  throw new Error('No available area codes. Please try again later or contact support.');
 }
 
 async function patchPhoneAssistant(phoneNumberId: string, assistantId: string): Promise<void> {

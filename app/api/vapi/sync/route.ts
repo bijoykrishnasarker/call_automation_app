@@ -337,15 +337,6 @@ export async function POST(request: NextRequest) {
         model: 'nova-3' as const,
         provider: 'deepgram' as const,
         language: 'en',
-        fallbackPlan: {
-          transcribers: [
-            {
-              provider: 'openai' as const,
-              model: 'gpt-4o-transcribe' as const,
-              language: 'en',
-            },
-          ],
-        },
       },
       model: {
         provider: 'openai' as const,
@@ -357,15 +348,6 @@ export async function POST(request: NextRequest) {
       voice: {
         provider: 'vapi' as const,
         voiceId,
-        fallbackPlan: {
-          voices: [
-            {
-              provider: '11labs' as const,
-              voiceId: 'sarah',
-              model: 'eleven_multilingual_v2' as const,
-            },
-          ],
-        },
       },
       analysisPlan: {
         structuredDataPlan: {
