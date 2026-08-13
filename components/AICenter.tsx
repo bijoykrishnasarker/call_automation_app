@@ -126,6 +126,7 @@ export const AICenter: React.FC = () => {
 
     const [isTestingVoice, setIsTestingVoice] = useState(false);
     const [isTraining, setIsTraining] = useState(false);
+    const [phoneIntegrationTab, setPhoneIntegrationTab] = useState<'web' | 'phone'>('web');
     const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
 
     // Load voice settings on mount
@@ -975,60 +976,108 @@ Start by greeting the caller with: "${greeting}"`;
                                             <p className="text-[10px] text-slate-400 mt-1">If the AI cannot answer a query, it will attempt to transfer the call here.</p>
                                         </div>
                                     )}
-                                </div>
-
-                                <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-3">
-                                    <div className="flex flex-wrap gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={handleSyncAssistant}
-                                            disabled={isLoadingInitial || isSaving || isSyncingAssistant}
-                                            className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            {isSyncingAssistant ? 'Syncing…' : 'Sync with Vapi'}
-                                        </button>
-                                        {!formData.phoneNumber?.trim() && (
+                                    <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4">
+                                        {/* Tabs Selector */}
+                                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-fit">
                                             <button
                                                 type="button"
-                                                onClick={handleProvisionPhone}
-                                                disabled={isLoadingInitial || isSaving || isProvisioningPhone}
-                                                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                onClick={() => setPhoneIntegrationTab('web')}
+                                                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${phoneIntegrationTab === 'web' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
                                             >
-                                                {isProvisioningPhone ? 'Provisioning…' : 'Provision Phone Number'}
+                                                1. Test Web Call (Browser)
                                             </button>
-                                        )}
-                                        {formData.phoneNumber?.trim() && (
                                             <button
                                                 type="button"
-                                                onClick={handleLinkAssistantToPhone}
-                                                disabled={
-                                                    isLoadingInitial ||
-                                                    isSaving ||
-                                                    isLinkingAssistantToPhone ||
-                                                    isSyncingAssistant
-                                                }
-                                                className="px-4 py-2 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded-lg text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-950/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                title="If Vapi shows the wrong assistant for this number, run Save or Sync first, then click here."
+                                                onClick={() => setPhoneIntegrationTab('phone')}
+                                                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${phoneIntegrationTab === 'phone' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
                                             >
-                                                {isLinkingAssistantToPhone ? 'Linking…' : 'Link assistant to number'}
+                                                2. Connect Real Phone Number
                                             </button>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Connected Phone Number</label>
-                                        <input
-                                            type="text"
-                                            readOnly
-                                            value={formData.phoneNumber?.trim() || "Click 'Provision Phone Number' to generate your AI line."}
-                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-700 dark:text-slate-200 read-only:cursor-default read-only:select-none"
-                                            aria-describedby="phone-helper"
-                                        />
-                                        <div
-                                            id="phone-helper"
-                                            className="mt-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 px-3 py-2 text-xs text-slate-500 dark:text-slate-400"
-                                        >
-                                            To activate your AI receptionist, set up Call Forwarding with your current phone provider. Have them forward missed or unanswered calls directly to the number above.
                                         </div>
+
+                                        {/* Tab 1: Web Call (Default) */}
+                                        {phoneIntegrationTab === 'web' && (
+                                            <div className="bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50 space-y-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-lime-100 dark:bg-lime-950 text-lime-700 dark:text-lime-400 rounded-lg">
+                                                        <Mic className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <h5 className="text-xs font-bold text-slate-700 dark:text-slate-200">Interactive Web Dialer</h5>
+                                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Speak directly to your AI Assistant inside the browser using your microphone.</p>
+                                                    </div>
+                                                </div>
+                                                <div className="pt-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleTestVoice}
+                                                        disabled={isLoadingInitial || isSaving}
+                                                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-xs transition-all ${isTestingVoice ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 animate-pulse' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'}`}
+                                                    >
+                                                        {isTestingVoice ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5" />}
+                                                        {isTestingVoice ? 'Stop Call' : 'Start Web Test Call'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Tab 2: Real Phone Connection */}
+                                        {phoneIntegrationTab === 'phone' && (
+                                            <div className="space-y-4">
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSyncAssistant}
+                                                        disabled={isLoadingInitial || isSaving || isSyncingAssistant}
+                                                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    >
+                                                        {isSyncingAssistant ? 'Syncing…' : 'Sync with Vapi'}
+                                                    </button>
+                                                    {!formData.phoneNumber?.trim() && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleProvisionPhone}
+                                                            disabled={isLoadingInitial || isSaving || isProvisioningPhone}
+                                                            className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                        >
+                                                            {isProvisioningPhone ? 'Provisioning…' : 'Provision Phone Number'}
+                                                        </button>
+                                                    )}
+                                                    {formData.phoneNumber?.trim() && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleLinkAssistantToPhone}
+                                                            disabled={
+                                                                isLoadingInitial ||
+                                                                isSaving ||
+                                                                isLinkingAssistantToPhone ||
+                                                                isSyncingAssistant
+                                                            }
+                                                            className="px-4 py-2 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded-lg text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-950/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                            title="If Vapi shows the wrong assistant for this number, run Save or Sync first, then click here."
+                                                        >
+                                                            {isLinkingAssistantToPhone ? 'Linking…' : 'Link assistant to number'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Connected Phone Number</label>
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={formData.phoneNumber?.trim() || "Click 'Provision Phone Number' to generate your AI line."}
+                                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-700 dark:text-slate-200 read-only:cursor-default read-only:select-none"
+                                                        aria-describedby="phone-helper"
+                                                    />
+                                                    <div
+                                                        id="phone-helper"
+                                                        className="mt-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 px-3 py-2 text-xs text-slate-500 dark:text-slate-400"
+                                                    >
+                                                        To activate your AI receptionist, set up Call Forwarding with your current phone provider. Have them forward missed or unanswered calls directly to the number above.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-3 pt-2">
                                         <button
