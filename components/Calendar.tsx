@@ -187,6 +187,35 @@ export const Calendar: React.FC = () => {
         return `${startStr} - ${endStr}`;
     };
 
+    const getApptTheme = (type: Appointment['type']) => {
+        if (type === 'Consultation') {
+            return {
+                bg: 'bg-lime-50 dark:bg-lime-950/40',
+                border: 'border-lime-200/80 dark:border-lime-800/85 border-l-lime-500 dark:border-l-lime-500',
+                text: 'text-lime-700 dark:text-lime-300',
+                badge: 'bg-lime-100 text-lime-800 dark:bg-lime-900/50 dark:text-lime-300',
+                hover: 'hover:bg-lime-100/60 dark:hover:bg-lime-900/20'
+            };
+        }
+        if (type === 'Checkup') {
+            return {
+                bg: 'bg-purple-50 dark:bg-purple-950/40',
+                border: 'border-purple-200/80 dark:border-purple-800/85 border-l-purple-500 dark:border-l-purple-500',
+                text: 'text-purple-700 dark:text-purple-300',
+                badge: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300',
+                hover: 'hover:bg-purple-100/60 dark:hover:bg-purple-900/20'
+            };
+        }
+        // Default to Service (Indigo/Blue)
+        return {
+            bg: 'bg-indigo-50 dark:bg-indigo-950/40',
+            border: 'border-indigo-200/80 dark:border-indigo-800/85 border-l-indigo-500 dark:border-l-indigo-500',
+            text: 'text-indigo-700 dark:text-indigo-300',
+            badge: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300',
+            hover: 'hover:bg-indigo-100/60 dark:hover:bg-indigo-900/20'
+        };
+    };
+
     const getAppointmentStyle = (appt: Appointment) => {
         const startHour = appt.start.getHours() + appt.start.getMinutes() / 60;
         const endHour = appt.end.getHours() + appt.end.getMinutes() / 60;
@@ -197,14 +226,13 @@ export const Calendar: React.FC = () => {
         const top = Math.min(topPx, maxTop);
         const height = Math.max(32, duration * HOUR_HEIGHT);
 
-        let colorClass = 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-800 dark:text-blue-300';
-        if (appt.type === 'Consultation') colorClass = 'bg-lime-100 border-lime-200 text-lime-700 dark:bg-lime-900/40 dark:border-lime-800 dark:text-lime-300';
-        if (appt.type === 'Checkup') colorClass = 'bg-purple-100 border-purple-200 text-purple-700 dark:bg-purple-900/40 dark:border-purple-800 dark:text-purple-300';
+        const theme = getApptTheme(appt.type);
+        const colorClass = `${theme.bg} ${theme.border} ${theme.text} border-l-4`;
 
         return {
             top: `${top}px`,
             height: `${height}px`,
-            className: `absolute left-1 right-1 rounded-lg border p-2 text-xs shadow-sm hover:shadow-md transition-shadow cursor-pointer z-10 overflow-hidden min-w-0 ${colorClass}`
+            className: `absolute left-1.5 right-1.5 rounded-lg border p-2.5 text-xs shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 cursor-pointer z-10 overflow-hidden min-w-0 ${colorClass}`
         };
     };
 
@@ -231,24 +259,27 @@ export const Calendar: React.FC = () => {
                         const dayAppts = appointments.filter(a => isSameDate(a.start, day));
 
                         return (
-                            <div key={i} className={`min-h-[100px] border-b border-r border-slate-200 dark:border-slate-800 p-2 relative group transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 ${!isCurrentMonth ? 'bg-slate-50/50 dark:bg-slate-950/50 text-slate-400' : 'bg-white dark:bg-slate-900'}`}>
-                                <div className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full mb-1 ${isToday ? 'bg-lime-600 text-white' : ''}`}>
+                            <div key={i} className={`min-h-[100px] border-b border-r border-slate-200 dark:border-slate-800 p-2 relative group transition-colors hover:bg-slate-50 dark:hover:bg-slate-850/50 ${!isCurrentMonth ? 'bg-slate-50/50 dark:bg-slate-950/50 text-slate-400' : 'bg-white dark:bg-slate-900'}`}>
+                                <div className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full mb-1 transition-all ${isToday ? 'bg-lime-600 text-white shadow-sm shadow-lime-600/35 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
                                     {day.getDate()}
                                 </div>
 
                                 <div className="space-y-1">
-                                    {dayAppts.map(appt => (
-                                        <button
-                                            key={appt.id}
-                                            type="button"
-                                            onClick={() => openEventDetail(appt)}
-                                            onMouseEnter={(e) => handleEventMouseEnter(appt, e)}
-                                            onMouseLeave={handleEventMouseLeave}
-                                            className="w-full text-left text-[10px] truncate px-1.5 py-0.5 rounded bg-lime-100 dark:bg-lime-900/30 text-lime-800 dark:text-lime-300 border border-lime-200 dark:border-lime-800/50 hover:ring-1 hover:ring-lime-500 cursor-pointer"
-                                        >
-                                            {appt.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()} {appt.title}
-                                        </button>
-                                    ))}
+                                    {dayAppts.map(appt => {
+                                        const theme = getApptTheme(appt.type);
+                                        return (
+                                            <button
+                                                key={appt.id}
+                                                type="button"
+                                                onClick={() => openEventDetail(appt)}
+                                                onMouseEnter={(e) => handleEventMouseEnter(appt, e)}
+                                                onMouseLeave={handleEventMouseLeave}
+                                                className={`w-full text-left text-[10px] font-medium truncate px-2 py-1 rounded border-l-2 ${theme.bg} ${theme.text} ${theme.border} ${theme.hover} transition-all duration-150 cursor-pointer`}
+                                            >
+                                                <span className="font-semibold">{appt.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}</span> {appt.title}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                                 {/* Add Button on Hover */}
                                 <button
@@ -305,17 +336,18 @@ export const Calendar: React.FC = () => {
                                 onKeyDown={(e) => e.key === 'Enter' && openEventDetail(appt)}
                             >
                                 <div className="flex justify-between items-start gap-1 min-w-0">
-                                    <span className="font-bold truncate text-sm min-w-0">{appt.title}</span>
-                                    {appt.status === 'Confirmed' && <CheckCircle className="w-4 h-4 flex-shrink-0" />}
+                                    <span className="font-bold truncate text-sm min-w-0 text-slate-800 dark:text-slate-100">{appt.title}</span>
+                                    {appt.status === 'Confirmed' && <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-500" />}
                                 </div>
-                                <div className="flex items-center gap-1 mt-1 opacity-90 min-w-0 overflow-hidden">
-                                    <Clock className="w-3 h-3 flex-shrink-0" />
+                                <div className="flex items-center gap-1.5 mt-1 text-[11px] opacity-90 min-w-0 overflow-hidden text-slate-600 dark:text-slate-350">
+                                    <Clock className="w-3.5 h-3.5 flex-shrink-0" />
                                     <span className="truncate">{appt.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {appt.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    <span className="mx-0.5 flex-shrink-0">•</span>
-                                    <User className="w-3 h-3 flex-shrink-0" />
-                                    <span className="truncate min-w-0">{appt.contactName}</span>
                                 </div>
-                                <div className="mt-2 text-xs opacity-75 truncate">{appt.type}</div>
+                                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] opacity-90 min-w-0 overflow-hidden text-slate-600 dark:text-slate-350">
+                                    <User className="w-3.5 h-3.5 flex-shrink-0" />
+                                    <span className="truncate min-w-0 font-medium">{appt.contactName || 'No Contact'}</span>
+                                </div>
+                                <div className="mt-2.5 inline-flex px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-white/60 dark:bg-black/25 text-slate-500 dark:text-slate-400">{appt.type}</div>
                             </div>
                         );
                     })}
@@ -397,16 +429,16 @@ export const Calendar: React.FC = () => {
                                             onKeyDown={(e) => e.key === 'Enter' && openEventDetail(appt)}
                                         >
                                             <div className="flex justify-between items-start gap-1 min-w-0">
-                                                <span className="font-bold truncate min-w-0">{appt.title}</span>
-                                                {appt.status === 'Confirmed' && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
+                                                <span className="font-bold truncate min-w-0 text-slate-800 dark:text-slate-100">{appt.title}</span>
+                                                {appt.status === 'Confirmed' && <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500" />}
                                             </div>
-                                            <div className="flex items-center gap-1 mt-1 opacity-90 min-w-0 overflow-hidden">
+                                            <div className="flex items-center gap-1 mt-1 text-[10px] opacity-90 min-w-0 overflow-hidden text-slate-600 dark:text-slate-350">
                                                 <Clock className="w-3 h-3 flex-shrink-0" />
-                                                <span className="truncate">{appt.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                <span className="truncate">{appt.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}</span>
                                             </div>
-                                            <div className="flex items-center gap-1 mt-0.5 opacity-90 min-w-0 overflow-hidden">
+                                            <div className="flex items-center gap-1 mt-0.5 text-[10px] opacity-90 min-w-0 overflow-hidden text-slate-600 dark:text-slate-350">
                                                 <User className="w-3 h-3 flex-shrink-0" />
-                                                <span className="truncate min-w-0">{appt.contactName}</span>
+                                                <span className="truncate min-w-0 font-medium">{appt.contactName || 'No Contact'}</span>
                                             </div>
                                         </div>
                                     );
