@@ -139,10 +139,18 @@ export async function GET(request: NextRequest) {
     console.warn('[GET /api/ai-receptionist/settings] vapi_phone_numbers', phoneError.message);
   }
 
+  const { data: assistantRow } = await supabase
+    .from('vapi_assistants')
+    .select('vapi_assistant_id')
+    .eq('organization_id', organizationId)
+    .eq('is_primary', true)
+    .maybeSingle();
+
   const settings = normalizeSettingsRow(data as unknown as AiReceptionistSettingsRow | null);
   const body: AiReceptionistSettingsResponse = {
     settings,
     connected_phone_number: phoneRow?.e164_number ?? null,
+    vapi_assistant_id: assistantRow?.vapi_assistant_id ?? null,
   };
   return NextResponse.json(body);
 }

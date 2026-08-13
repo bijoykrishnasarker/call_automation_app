@@ -3,6 +3,7 @@ export interface AiReceptionistSettingsResponse {
   settings: AiReceptionistSettingsRow | null;
   /** Primary org line from `vapi_phone_numbers`; not stored on `ai_receptionists`. */
   connected_phone_number: string | null;
+  vapi_assistant_id: string | null;
 }
 
 /**

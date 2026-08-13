@@ -31,6 +31,7 @@ export interface GetSettingsResponse {
   settings: AiReceptionistSettingsRow | null;
   /** Primary line from `vapi_phone_numbers` (read-only display). */
   connected_phone_number: string | null;
+  vapi_assistant_id: string | null;
 }
 
 export interface PostSettingsBody {

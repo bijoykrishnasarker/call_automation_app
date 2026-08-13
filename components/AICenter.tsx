@@ -126,7 +126,7 @@ export const AICenter: React.FC = () => {
 
     const [isTestingVoice, setIsTestingVoice] = useState(false);
     const [isTraining, setIsTraining] = useState(false);
-    const [phoneIntegrationTab, setPhoneIntegrationTab] = useState<'web' | 'phone'>('web');
+    const [vapiAssistantId, setVapiAssistantId] = useState<string | null>(null);
     const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
 
     // Load voice settings on mount
@@ -151,8 +151,9 @@ export const AICenter: React.FC = () => {
                     }
                     return;
                 }
-                const { settings, connected_phone_number } = await fetchAiReceptionistSettings(session.access_token);
+                const { settings, connected_phone_number, vapi_assistant_id } = await fetchAiReceptionistSettings(session.access_token);
                 if (!cancelled) {
+                    setVapiAssistantId(vapi_assistant_id);
                     if (settings === null) {
                         setFormData(FORM_DEFAULTS);
                     } else {
@@ -295,6 +296,12 @@ export const AICenter: React.FC = () => {
             const vapiData = await vapiRes.json().catch(() => ({}));
             if (vapiRes.ok) {
                 vapiMessage = (vapiData as { message?: string }).message ?? 'Settings saved and synced with Vapi.';
+                try {
+                    const fresh = await fetchAiReceptionistSettings(accessToken);
+                    setVapiAssistantId(fresh.vapi_assistant_id);
+                } catch (e) {
+                    console.warn('Failed to reload fresh settings:', e);
+                }
             } else {
                 const vapiErr = (vapiData as { message?: string }).message ?? 'sync failed';
                 vapiMessage = `Settings saved. Vapi sync warning: ${vapiErr}`;
@@ -487,40 +494,18 @@ export const AICenter: React.FC = () => {
             return;
         }
 
-        const voiceId = (WEB_VOICE_MAP[formData.voiceModel] ?? 'Emma') as 'Elliot' | 'Kylie' | 'Rohan' | 'Lily' | 'Savannah' | 'Hana' | 'Neha' | 'Cole' | 'Harry' | 'Paige' | 'Spencer' | 'Leah' | 'Tara';
-        const agentName = formData.agentName || 'Sarah';
-        const businessName = formData.businessName || 'our business';
-        const servicesList = formData.services.length > 0 ? formData.services.join(', ') : 'Consultation, Service';
-        const greeting = formData.greetingMessage || `Hello! Thanks for calling ${businessName}. I'm ${agentName}, how can I help you today?`;
-
-        const testPrompt = `You are ${agentName}, an AI voice receptionist for ${businessName}.
-Speak in a warm, professional tone. Keep answers concise.
-Services offered: ${servicesList}.
-${formData.bookAppointments ? 'You can book appointments for clients. Ask for their full name, phone number, email address, and preferred time.' : 'Offer to take a message for the team.'}
-Start by greeting the caller with: "${greeting}"`;
+        if (!vapiAssistantId) {
+            setError("Please click 'Sync with Vapi' first to create and configure your AI Receptionist with calendar tools before testing.");
+            return;
+        }
 
         try {
-            vapi.start({
-                name: `${agentName} - Receptionist Test`,
-                voice: {
-                    provider: 'vapi',
-                    voiceId,
-                },
-                model: {
-                    provider: 'openai',
-                    model: 'gpt-4o-mini',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: testPrompt,
-                        },
-                    ],
-                },
-            });
+            // Start call using the fully configured Vapi Assistant ID containing the webhook tools & server
+            vapi.start(vapiAssistantId);
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to start voice test');
         }
-    }, [isLoadingInitial, isSaving, isTestingVoice, formData.voiceModel, formData.agentName, formData.businessName, formData.services, formData.greetingMessage, formData.bookAppointments]);
+    }, [isLoadingInitial, isSaving, isTestingVoice, vapiAssistantId]);
 
     const handleTrainAI = () => {
         setIsTraining(true);
