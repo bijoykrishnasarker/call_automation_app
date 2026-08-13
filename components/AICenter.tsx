@@ -206,15 +206,26 @@ export const AICenter: React.FC = () => {
         const vapi = new Vapi(publicKey);
         vapiRef.current = vapi;
 
-        const onStart = () => setIsTestingVoice(true);
+        const onStart = () => {
+            setError(null);
+            setIsTestingVoice(true);
+        };
         const onEnd = () => setIsTestingVoice(false);
+        const onError = (err: any) => {
+            console.error('Vapi Web SDK Error:', err);
+            const msg = err?.message || err?.error || 'Vapi voice connection failed. Please check microphone permissions or try again.';
+            setError(`Vapi Error: ${msg}`);
+            setIsTestingVoice(false);
+        };
 
         vapi.on('call-start', onStart);
         vapi.on('call-end', onEnd);
+        vapi.on('error', onError);
 
         return () => {
             vapi.removeListener('call-start', onStart);
             vapi.removeListener('call-end', onEnd);
+            vapi.removeListener('error', onError);
             vapiRef.current = null;
         };
     }, []);
