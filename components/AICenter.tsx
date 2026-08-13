@@ -803,11 +803,6 @@ Start by greeting the caller with: "${greeting}"`;
                                                         ...formData,
                                                         services: [...formData.services, trimmed],
                                                         newServiceName: '',
-    captureName: true,
-    capturePhone: true,
-    captureEmail: true,
-    requireEmailConfirmation: true,
-    saveIncompleteAsReview: true,
                                                     });
                                                 }}
                                                 disabled={isLoadingInitial || isSaving}
