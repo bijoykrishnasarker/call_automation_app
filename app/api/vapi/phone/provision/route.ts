@@ -19,13 +19,16 @@ interface ProvisionBody {
   areaCode?: string;
 }
 
-/** Normalize area code: digits only, min 3 chars; default "415" */
+// Area codes Vapi currently supports (primary + fallbacks)
+const VAPI_AREA_CODE_FALLBACKS = ['442', '943', '843', '571', '202', '737'];
+
+/** Normalize area code: digits only, min 3 chars; default "442" (Vapi-available) */
 function normalizeAreaCode(raw: unknown): string {
   if (raw != null && typeof raw === 'string') {
     const digits = raw.replace(/\D/g, '');
     if (digits.length >= 3) return digits.slice(0, 3);
   }
-  return '415';
+  return VAPI_AREA_CODE_FALLBACKS[0]; // 442 — confirmed available
 }
 
 /** Response shape from Vapi POST /phone-number/buy (legacy fallback) */
@@ -64,24 +67,38 @@ async function verifyAssistantInVapi(assistantId: string): Promise<{ ok: true } 
   }
 }
 
-/** Preferred: create Vapi number with assistant in one request (SDK POST /phone-number). */
+/** Preferred: create Vapi number with assistant — tries multiple area codes automatically */
 async function createVapiNumberWithAssistant(
   areaCode: string,
   assistantId: string
 ): Promise<{ id: string; number: string }> {
-  const created = await vapi.phoneNumbers.create({
-    provider: 'vapi',
-    numberDesiredAreaCode: areaCode,
-    assistantId,
-  });
-  const row = created as { id?: string; number?: string };
-  if (typeof row.id !== 'string' || !row.id) {
-    throw new Error('Vapi create phone response missing id');
+  // Build ordered list: user-requested first, then our known-available fallbacks
+  const codesToTry = [areaCode, ...VAPI_AREA_CODE_FALLBACKS.filter(c => c !== areaCode)];
+
+  let lastError: Error = new Error('No area codes available');
+  for (const code of codesToTry) {
+    try {
+      const created = await vapi.phoneNumbers.create({
+        provider: 'vapi',
+        numberDesiredAreaCode: code,
+        assistantId,
+      });
+      const row = created as { id?: string; number?: string };
+      if (typeof row.id !== 'string' || !row.id) throw new Error('Vapi create phone response missing id');
+      if (typeof row.number !== 'string' || !row.number) throw new Error('Vapi create phone response missing number');
+      console.log(`[provision] Phone number created with area code ${code}: ${row.number}`);
+      return { id: row.id, number: row.number };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.toLowerCase().includes('area code') || msg.toLowerCase().includes('not available')) {
+        console.warn(`[provision] Area code ${code} not available, trying next`);
+        lastError = e instanceof Error ? e : new Error(msg);
+        continue;
+      }
+      throw e; // Non-area-code error — stop retrying
+    }
   }
-  if (typeof row.number !== 'string' || !row.number) {
-    throw new Error('Vapi create phone response missing number');
-  }
-  return { id: row.id, number: row.number };
+  throw lastError;
 }
 
 /** Legacy buy then PATCH assistant (some accounts may only support /buy). */
