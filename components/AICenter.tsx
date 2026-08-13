@@ -1102,18 +1102,18 @@ Start by greeting the caller with: "${greeting}"`;
                                 </div>
                             </div>
 
-                                                        {/* Contact Capture API & CRM Sync */}
+                            {/* Contact Capture API & CRM Sync */}
                             <div className={"bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm " + ((isLoadingInitial || isSaving) ? "opacity-70 pointer-events-none" : "")}>
                                 <h4 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Contact Capture & CRM Sync</h4>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                                     For best accuracy, the AI will ask callers to spell their email and confirm it before saving.
                                 </p>
                                 <div className="space-y-4 mb-6">
-                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Capture caller name</span><input type="checkbox" checked={formData.captureName} onChange={(e) => setFormData({...formData, captureName: e.target.checked})} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
-                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Capture caller phone</span><input type="checkbox" checked={formData.capturePhone} onChange={(e) => setFormData({...formData, capturePhone: e.target.checked})} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
-                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Capture caller email</span><input type="checkbox" checked={formData.captureEmail} onChange={(e) => setFormData({...formData, captureEmail: e.target.checked})} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
-                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Require email confirmation before marking complete</span><input type="checkbox" checked={formData.requireEmailConfirmation} onChange={(e) => setFormData({...formData, requireEmailConfirmation: e.target.checked})} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
-                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Save incomplete contacts as Needs Review</span><input type="checkbox" checked={formData.saveIncompleteAsReview} onChange={(e) => setFormData({...formData, saveIncompleteAsReview: e.target.checked})} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
+                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Capture caller name</span><input type="checkbox" checked={formData.captureName} onChange={(e) => setFormData({ ...formData, captureName: e.target.checked })} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
+                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Capture caller phone</span><input type="checkbox" checked={formData.capturePhone} onChange={(e) => setFormData({ ...formData, capturePhone: e.target.checked })} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
+                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Capture caller email</span><input type="checkbox" checked={formData.captureEmail} onChange={(e) => setFormData({ ...formData, captureEmail: e.target.checked })} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
+                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Require email confirmation before marking complete</span><input type="checkbox" checked={formData.requireEmailConfirmation} onChange={(e) => setFormData({ ...formData, requireEmailConfirmation: e.target.checked })} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
+                                    <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Save incomplete contacts as Needs Review</span><input type="checkbox" checked={formData.saveIncompleteAsReview} onChange={(e) => setFormData({ ...formData, saveIncompleteAsReview: e.target.checked })} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
                                 </div>
                                 <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                                     <h5 className="text-xs font-bold text-slate-500 uppercase">Webhook Status</h5>
@@ -1149,7 +1149,7 @@ Start by greeting the caller with: "${greeting}"`;
                                                     <div className="flex justify-between items-end mt-2">
                                                         <div className="flex flex-col gap-1">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="font-medium">Email:</span> 
+                                                                <span className="font-medium">Email:</span>
                                                                 {call.email ? (
                                                                     <span className="text-slate-700 dark:text-slate-200">{call.email}</span>
                                                                 ) : (
@@ -1158,7 +1158,7 @@ Start by greeting the caller with: "${greeting}"`;
                                                                 {call.email_confirmed && <span className="px-1.5 py-0.5 rounded-full bg-lime-100 text-lime-700 text-[10px] font-bold">Confirmed</span>}
                                                             </div>
                                                             <div className="flex items-start gap-2">
-                                                                <span className="font-medium">Missing:</span> 
+                                                                <span className="font-medium">Missing:</span>
                                                                 {missing.length > 0 ? (
                                                                     <span className="text-amber-500">{missing.join(', ')}</span>
                                                                 ) : (
