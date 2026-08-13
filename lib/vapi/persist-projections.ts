@@ -551,38 +551,61 @@ export async function executeToolCalls(params: {
           continue;
         }
 
-        const contactResult = await upsertCanonicalContact({
-          supabase,
-          organizationId,
-          ownerUserId,
-          contact: toolCall.contact,
-          envelope,
-        });
-        const appointmentResult = await upsertCanonicalAppointment({
-          supabase,
-          organizationId,
-          ownerUserId,
-          providerAssistantId: envelope.provider_assistant_id,
-          providerCallId: envelope.provider_call_id,
-          contactId: contactResult.contactId,
-          appointment: toolCall.appointment,
-        });
+        try {
+          const contactResult = await upsertCanonicalContact({
+            supabase,
+            organizationId,
+            ownerUserId,
+            contact: toolCall.contact,
+            envelope,
+          });
+          const appointmentResult = await upsertCanonicalAppointment({
+            supabase,
+            organizationId,
+            ownerUserId,
+            providerAssistantId: envelope.provider_assistant_id,
+            providerCallId: envelope.provider_call_id,
+            contactId: contactResult.contactId,
+            appointment: toolCall.appointment,
+          });
 
-        logVapiInfo('vapi.tool.book_appointment', {
-          organization_id: organizationId,
-          provider_call_id: envelope.provider_call_id,
-          external_appointment_id: toolCall.appointment.external_appointment_id,
-          booking_id: appointmentResult.bookingId,
-        });
+          logVapiInfo('vapi.tool.book_appointment', {
+            organization_id: organizationId,
+            provider_call_id: envelope.provider_call_id,
+            external_appointment_id: toolCall.appointment.external_appointment_id,
+            booking_id: appointmentResult.bookingId,
+          });
 
-        results.push({
-          toolCallId: toolCall.id,
-          result: JSON.stringify({
-            booked: true,
-            appointmentId: appointmentResult.appointmentId,
-            bookingId: appointmentResult.bookingId,
-          }),
-        });
+          results.push({
+            toolCallId: toolCall.id,
+            result: JSON.stringify({
+              booked: true,
+              appointmentId: appointmentResult.appointmentId,
+              bookingId: appointmentResult.bookingId,
+            }),
+          });
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : '';
+          if (errMsg.includes('slot_unavailable')) {
+            let suggested: any[] = [];
+            try {
+              suggested = JSON.parse(errMsg).suggestedSlots || [];
+            } catch {
+              // ignore parse errors
+            }
+            results.push({
+              toolCallId: toolCall.id,
+              result: JSON.stringify({
+                booked: false,
+                error: 'slot_unavailable',
+                message: 'This slot is already booked.',
+                suggestedSlots: suggested
+              })
+            });
+          } else {
+            throw err;
+          }
+        }
         continue;
       }
 
@@ -630,15 +653,28 @@ export async function persistEnvelope(params: {
 
   let appointmentResult: { appointmentId: string; bookingId: string | null; decision: ProjectionDecision } | null = null;
   if (envelope.appointment && contactResult) {
-    appointmentResult = await upsertCanonicalAppointment({
-      supabase,
-      organizationId,
-      ownerUserId,
-      providerAssistantId: envelope.provider_assistant_id,
-      providerCallId: envelope.provider_call_id,
-      contactId: contactResult.contactId,
-      appointment: envelope.appointment,
-    });
+    try {
+      appointmentResult = await upsertCanonicalAppointment({
+        supabase,
+        organizationId,
+        ownerUserId,
+        providerAssistantId: envelope.provider_assistant_id,
+        providerCallId: envelope.provider_call_id,
+        contactId: contactResult.contactId,
+        appointment: envelope.appointment,
+      });
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : '';
+      if (errMsg.includes('slot_unavailable')) {
+        logVapiWarn('vapi.projection.appointment.slot_conflict', {
+          organization_id: organizationId,
+          provider_call_id: envelope.provider_call_id,
+          message: 'Appointment projection skipped due to slot conflict',
+        });
+      } else {
+        throw e;
+      }
+    }
   }
 
   return {
