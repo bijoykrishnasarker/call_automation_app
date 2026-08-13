@@ -42,23 +42,23 @@ interface ReceptionistFormData {
 }
 
 const FORM_DEFAULTS: ReceptionistFormData = {
-    isEnabled: false,
+    isEnabled: true,
     agentName: 'Sarah',
     voiceModel: 'sarah',
     voiceSpeed: 1.0,
 
-    businessName: '',
-    businessType: '',
-    businessAddress: '',
-    businessHours: '',
+    businessName: 'LeadOps AI Services',
+    businessType: 'Consulting & Services',
+    businessAddress: '123 Main Street',
+    businessHours: '09:00 AM – 06:00 PM',
 
-    services: [],
-    additionalInfo: '',
+    services: ['Consultation', 'Service Call', 'Checkup'],
+    additionalInfo: 'Polite, professional receptionist. Answers questions and books appointments for clients.',
 
-    greetingMessage: '',
+    greetingMessage: 'Hello! Thank you for calling. How can I assist you today?',
 
     answerQuestions: true,
-    bookAppointments: false,
+    bookAppointments: true,
     takeMessages: true,
     transferEnabled: false,
     transferNumber: '',
@@ -476,9 +476,20 @@ export const AICenter: React.FC = () => {
         }
 
         const voiceId = (WEB_VOICE_MAP[formData.voiceModel] ?? 'Emma') as 'Elliot' | 'Kylie' | 'Rohan' | 'Lily' | 'Savannah' | 'Hana' | 'Neha' | 'Cole' | 'Harry' | 'Paige' | 'Spencer' | 'Leah' | 'Tara';
+        const agentName = formData.agentName || 'Sarah';
+        const businessName = formData.businessName || 'our business';
+        const servicesList = formData.services.length > 0 ? formData.services.join(', ') : 'Consultation, Service';
+        const greeting = formData.greetingMessage || `Hello! Thanks for calling ${businessName}. I'm ${agentName}, how can I help you today?`;
+
+        const testPrompt = `You are ${agentName}, an AI voice receptionist for ${businessName}.
+Speak in a warm, professional tone. Keep answers concise.
+Services offered: ${servicesList}.
+${formData.bookAppointments ? 'You can book appointments for clients. Ask for their full name, phone number, email address, and preferred time.' : 'Offer to take a message for the team.'}
+Start by greeting the caller with: "${greeting}"`;
+
         try {
             vapi.start({
-                name: 'Voice Test',
+                name: `${agentName} - Receptionist Test`,
                 voice: {
                     provider: 'vapi',
                     voiceId,
@@ -489,7 +500,7 @@ export const AICenter: React.FC = () => {
                     messages: [
                         {
                             role: 'system',
-                            content: 'You are testing your voice. Introduce yourself briefly and ask how you sound.',
+                            content: testPrompt,
                         },
                     ],
                 },
@@ -497,7 +508,7 @@ export const AICenter: React.FC = () => {
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to start voice test');
         }
-    }, [isLoadingInitial, isSaving, isTestingVoice, formData.voiceModel]);
+    }, [isLoadingInitial, isSaving, isTestingVoice, formData.voiceModel, formData.agentName, formData.businessName, formData.services, formData.greetingMessage, formData.bookAppointments]);
 
     const handleTrainAI = () => {
         setIsTraining(true);
