@@ -120,9 +120,10 @@ function compileSystemPrompt(body: SyncBody): string {
       `1) Collect name, phone, and email, plus the requested date and time.\n` +
       `2) Call \`check_availability\` with timezone "Asia/Dhaka" unless the caller said another timezone. Use requestedStartAt or localDate+localTime. durationMinutes defaults to 30.\n` +
       `3) If isAvailable is false, say clearly: that time is already booked, please choose another time. Read the suggestedSlots display times (example: 3:30 PM) and wait for the caller to pick one.\n` +
-      `4) Never say a booking is confirmed until \`book_appointment\` returns booked=true.\n` +
-      `5) After the caller confirms an open slot, call \`book_appointment\`. That writes the event to the calendar.\n` +
-      `6) If book_appointment returns booked=false / slot_unavailable, tell the caller the time was just taken and offer the new suggestedSlots.`
+      `4) Never say a booking is confirmed until \`book_appointment\` returns booked=true OR you have repeated the date and time and the caller confirmed.\n` +
+      `5) After the caller confirms an open slot, call \`book_appointment\`. That writes the event to the calendar immediately.\n` +
+      `6) If you cannot call book_appointment before the call ends, still capture preferredDate, preferredTime, and set appointmentRequested=true in structured data — the system saves the appointment when the call ends.\n` +
+      `7) If book_appointment returns booked=false / slot_unavailable, tell the caller the time was just taken and offer the new suggestedSlots.`
     );
   }
 
@@ -263,6 +264,7 @@ export async function POST(request: NextRequest) {
     services,
     additional_business_info,
     greeting_message,
+    is_enabled: true,
     updated_at: now,
   };
 
@@ -355,7 +357,7 @@ export async function POST(request: NextRequest) {
         structuredDataPlan: {
           schema: structuredDataSchema,
         },
-        structuredDataPrompt: "You are an expert CRM data extractor. Extract caller contact and lead information from the full call transcript. Convert spoken emails like 'john at gmail dot com' into 'john@gmail.com'. Only set emailConfirmed=true if the assistant repeated the email and the caller confirmed it. If the email is ambiguous, missing @, missing domain, or not confirmed, set email to null or emailConfirmed=false and add the issue to missingFields. Return clean JSON only.",
+        structuredDataPrompt: "You are an expert CRM data extractor. Extract caller contact and lead information from the full call transcript. Convert spoken emails like 'john at gmail dot com' into 'john@gmail.com'. Only set emailConfirmed=true if the assistant repeated the email and the caller confirmed it. If the caller confirmed an appointment date and time, set appointment.appointmentRequested=true and fill appointment.preferredDate (YYYY-MM-DD) and appointment.preferredTime (HH:mm or 3:30 PM). Return clean JSON only.",
       },
       ...(webhookServer ? { server: webhookServer } : {}),
     };

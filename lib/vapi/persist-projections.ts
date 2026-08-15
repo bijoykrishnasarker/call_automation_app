@@ -726,7 +726,64 @@ export async function persistEnvelope(params: {
 
   let appointmentResult: { appointmentId: string; bookingId: string | null; decision: ProjectionDecision } | null = null;
   const bookedViaTool = envelope.tool_calls.some(toolCall => toolCall.name === 'book_appointment');
+  const isEndOfCallReport = envelope.provider_event_type === 'end-of-call-report';
+
   if (envelope.appointment && contactResult && !bookedViaTool && envelope.provider_event_type !== 'tool-calls') {
+    if (isEndOfCallReport) {
+      const { data: receptionistSettings } = await supabase
+        .from('ai_receptionists')
+        .select('can_book_appointments')
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+      if (receptionistSettings?.can_book_appointments === false) {
+        logVapiInfo('vapi.end_of_call.appointment_skipped', {
+          organization_id: organizationId,
+          provider_call_id: envelope.provider_call_id,
+          reason: 'booking_disabled',
+        });
+      } else if (envelope.provider_call_id) {
+        const { data: existingAppointment } = await supabase
+          .from('appointments')
+          .select('id')
+          .eq('organization_id', organizationId)
+          .eq('provider_call_id', envelope.provider_call_id)
+          .maybeSingle();
+        if (existingAppointment?.id) {
+          logVapiInfo('vapi.end_of_call.appointment_skipped', {
+            organization_id: organizationId,
+            provider_call_id: envelope.provider_call_id,
+            reason: 'already_booked_for_call',
+          });
+        } else {
+          try {
+            appointmentResult = await upsertCanonicalAppointment({
+              supabase,
+              organizationId,
+              ownerUserId,
+              providerAssistantId: envelope.provider_assistant_id,
+              providerCallId: envelope.provider_call_id,
+              contactId: contactResult.contactId,
+              appointment: envelope.appointment,
+            });
+            logVapiInfo('vapi.end_of_call.appointment_saved', {
+              organization_id: organizationId,
+              provider_call_id: envelope.provider_call_id,
+              booking_id: appointmentResult.bookingId,
+            });
+          } catch (error) {
+            if (error instanceof SlotUnavailableError) {
+              logVapiWarn('vapi.end_of_call.appointment.slot_conflict', {
+                organization_id: organizationId,
+                provider_call_id: envelope.provider_call_id,
+                message: error.availability.message,
+              });
+            } else {
+              throw error;
+            }
+          }
+        }
+      }
+    } else {
     try {
       appointmentResult = await upsertCanonicalAppointment({
         supabase,
@@ -747,6 +804,7 @@ export async function persistEnvelope(params: {
       } else {
         throw error;
       }
+    }
     }
   }
 

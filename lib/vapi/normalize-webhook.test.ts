@@ -221,4 +221,41 @@ describe('normalizeVapiWebhook', () => {
     expect(toolCall.appointment?.start_time_utc).toBe('2026-08-16T09:30:00.000Z');
     expect(toolCall.validation_errors).toHaveLength(0);
   });
+
+  it('builds an appointment on end-of-call-report from structured data', () => {
+    const payload = {
+      message: {
+        type: 'end-of-call-report',
+        call: {
+          id: 'call_end_001',
+          metadata: { organization_id: 'org_001' },
+          customer: { name: 'Karim Ahmed', email: 'karim@gmail.com' },
+        },
+        analysis: {
+          structuredData: {
+            appointment: {
+              appointmentRequested: true,
+              preferredDate: '2026-08-18',
+              preferredTime: '11:00 AM',
+            },
+            lead: { requestedService: 'Service Call' },
+          },
+        },
+        transcript: 'Book me for August 18 at 11 am please.',
+      },
+    };
+
+    const envelope = normalizeVapiWebhook({
+      payload,
+      rawBody: JSON.stringify(payload),
+      receivedAt: '2026-08-15T12:00:00.000Z',
+      authContext,
+      headers: new Headers(),
+    });
+
+    expect(envelope.provider_event_type).toBe('end-of-call-report');
+    expect(envelope.appointment?.subject).toBe('Service Call');
+    expect(envelope.appointment?.date).toBe('2026-08-18');
+    expect(envelope.contact?.email).toBe('karim@gmail.com');
+  });
 });

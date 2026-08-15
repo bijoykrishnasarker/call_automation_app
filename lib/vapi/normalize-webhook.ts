@@ -9,6 +9,7 @@ import {
   pickFirstString,
   splitFullName,
 } from '@/lib/vapi/conversation';
+import { buildEndOfCallAppointmentDraft } from '@/lib/vapi/end-of-call-appointment';
 import { inferDefaultTimezone, resolveAppointmentWindow } from '@/lib/vapi/time';
 import type {
   CanonicalAppointmentProjection,
@@ -503,8 +504,33 @@ export function normalizeVapiWebhook(input: {
   });
 
   let appointment: CanonicalAppointmentProjection | null = null;
-  // Appointments are created only via the book_appointment tool so they always
-  // go through the calendar conflict check. Transcript guesses are not persisted.
+  if (provider_event_type === 'end-of-call-report' && contact) {
+    const draft = buildEndOfCallAppointmentDraft({
+      message,
+      payload: input.payload,
+      transcriptText: transcript_text,
+      referenceAt: occurred_at,
+    });
+    if (draft) {
+      appointment = buildCanonicalAppointment({
+        organizationId: organization_id,
+        providerCallId: provider_call_id,
+        contact,
+        startAt: draft.startAt,
+        localDate: draft.localDate,
+        localTime: draft.localTime,
+        timezone: draft.timezone,
+        durationMinutes: draft.durationMinutes,
+        subject: draft.subject,
+        notes: draft.notes,
+        createdAt: occurred_at,
+        updatedAt: occurred_at,
+        validationErrors: validation_errors,
+        warnings,
+        tracePath: 'appointment.end_of_call',
+      });
+    }
+  }
 
   const tool_calls_source = Array.isArray(message.toolCallList)
     ? message.toolCallList
