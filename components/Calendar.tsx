@@ -2,6 +2,11 @@
 
 import React, { useState } from 'react';
 import { Appointment } from '@/types';
+import {
+    formatTimeInZone,
+    getZonedHourMinute,
+    isSameCalendarDay,
+} from '@/lib/calendar/timezone';
 import { useApp } from '@/contexts/AppContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
@@ -170,18 +175,17 @@ export const Calendar: React.FC = () => {
         return days;
     };
 
-    const isSameDate = (d1: Date, d2: Date) => {
-        return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
-    };
+    const isSameDate = (d1: Date, d2: Date) => isSameCalendarDay(d1, d2);
 
-    const formatApptTime = (date: Date) =>
-        date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const formatApptTime = (date: Date) => formatTimeInZone(date);
+
+    const getAppointmentEnd = (appt: Appointment): Date =>
+        appt.end.getTime() <= appt.start.getTime()
+            ? new Date(appt.start.getTime() + 30 * 60 * 1000)
+            : appt.end;
 
     const formatApptTimeRange = (appt: Appointment) => {
-        const end =
-            appt.end.getTime() <= appt.start.getTime()
-                ? new Date(appt.start.getTime() + 30 * 60 * 1000)
-                : appt.end;
+        const end = getAppointmentEnd(appt);
         return `${formatApptTime(appt.start)} – ${formatApptTime(end)}`;
     };
 
@@ -228,8 +232,10 @@ export const Calendar: React.FC = () => {
     };
 
     const getAppointmentStyle = (appt: Appointment) => {
-        const startHour = appt.start.getHours() + appt.start.getMinutes() / 60;
-        const endHour = appt.end.getHours() + appt.end.getMinutes() / 60;
+        const startParts = getZonedHourMinute(appt.start);
+        const endParts = getZonedHourMinute(getAppointmentEnd(appt));
+        const startHour = startParts.hour + startParts.minute / 60;
+        const endHour = endParts.hour + endParts.minute / 60;
         const duration = Math.max(0.25, endHour - startHour);
 
         const topPx = Math.max(0, (startHour - FIRST_HOUR) * HOUR_HEIGHT);

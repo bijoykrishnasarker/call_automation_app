@@ -357,7 +357,7 @@ export async function POST(request: NextRequest) {
         structuredDataPlan: {
           schema: structuredDataSchema,
         },
-        structuredDataPrompt: "You are an expert CRM data extractor. Extract caller contact and lead information from the full call transcript. Convert spoken emails like 'john at gmail dot com' into 'john@gmail.com'. Only set emailConfirmed=true if the assistant repeated the email and the caller confirmed it. If the caller confirmed an appointment date and time, set appointment.appointmentRequested=true and fill appointment.preferredDate (YYYY-MM-DD) and appointment.preferredTime (HH:mm or 3:30 PM). Return clean JSON only.",
+        structuredDataPrompt: "You are an expert CRM data extractor. Extract caller contact and lead information from the full call transcript. Convert spoken emails like 'john at gmail dot com' into 'john@gmail.com'. Only set emailConfirmed=true if the assistant repeated the email and the caller confirmed it. If the caller confirmed an appointment, set appointment.appointmentRequested=true, appointment.preferredDate as YYYY-MM-DD, and appointment.preferredTime with am/pm (example: 4:00 PM for four in the afternoon — never save bare 4 as morning). Return clean JSON only.",
       },
       ...(webhookServer ? { server: webhookServer } : {}),
     };

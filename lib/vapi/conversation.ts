@@ -168,18 +168,28 @@ export function parseAppointmentFromConversation(
 
   let hour = 9;
   let minute = 0;
-  const timeMeridiem = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(text);
-  if (timeMeridiem) {
-    hour = Number(timeMeridiem[1]);
-    minute = Number(timeMeridiem[2] ?? '0');
-    const meridiem = timeMeridiem[3]!.toLowerCase();
-    if (meridiem === 'pm' && hour < 12) hour += 12;
-    if (meridiem === 'am' && hour === 12) hour = 0;
+  const atHour = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/i.exec(text);
+  if (atHour) {
+    hour = Number(atHour[1]);
+    minute = Number(atHour[2] ?? '0');
+    const suffix = atHour[3]?.replace(/\./g, '').toLowerCase();
+    if (suffix?.startsWith('p') && hour < 12) hour += 12;
+    if (suffix?.startsWith('a') && hour === 12) hour = 0;
+    if (!suffix && hour >= 1 && hour <= 7) hour += 12;
   } else {
-    const time24h = /\b(1\d|2[0-3]|\d):(\d{2})\b/.exec(text);
-    if (time24h) {
-      hour = Number(time24h[1]);
-      minute = Number(time24h[2]);
+    const timeMeridiem = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)/i.exec(text);
+    if (timeMeridiem) {
+      hour = Number(timeMeridiem[1]);
+      minute = Number(timeMeridiem[2] ?? '0');
+      const meridiem = timeMeridiem[3]!.replace(/\./g, '').toLowerCase();
+      if (meridiem.startsWith('p') && hour < 12) hour += 12;
+      if (meridiem.startsWith('a') && hour === 12) hour = 0;
+    } else {
+      const time24h = /\b(1\d|2[0-3]|\d):(\d{2})\b/.exec(text);
+      if (time24h) {
+        hour = Number(time24h[1]);
+        minute = Number(time24h[2]);
+      }
     }
   }
 

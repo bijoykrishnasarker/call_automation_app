@@ -1,4 +1,5 @@
 import { parseAppointmentFromConversation, pickFirstString } from '@/lib/vapi/conversation';
+import { normalizeAppointmentLocalTime } from '@/lib/vapi/parse-local-time';
 
 export interface EndOfCallAppointmentDraft {
   localDate: string | null;
@@ -46,29 +47,37 @@ function coerceBoolean(value: unknown): boolean {
 function normalizeLocalDate(raw: unknown): string | null {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   const trimmed = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  const parsed = Date.parse(trimmed);
-  if (Number.isNaN(parsed)) return null;
-  return new Date(parsed).toISOString().slice(0, 10);
+  const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (isoDate) return trimmed;
+
+  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+  if (dmy) {
+    return `${dmy[3]}-${String(Number(dmy[2])).padStart(2, '0')}-${String(Number(dmy[1])).padStart(2, '0')}`;
+  }
+
+  const monthDayYear = /^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?/i.exec(
+    trimmed
+  );
+  if (monthDayYear) {
+    const monthNames: Record<string, number> = {
+      january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
+      may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8,
+      september: 9, sep: 9, sept: 9, october: 10, oct: 10, november: 11, nov: 11,
+      december: 12, dec: 12,
+    };
+    const month = monthNames[monthDayYear[1]!.toLowerCase()];
+    const day = Number(monthDayYear[2]);
+    const year = Number(monthDayYear[3] ?? new Date().getFullYear());
+    if (month && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  return null;
 }
 
 function normalizeLocalTime(raw: unknown): string | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  const trimmed = raw.trim();
-  const meridiem = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i.exec(trimmed);
-  if (meridiem) {
-    let hour = Number(meridiem[1]);
-    const minute = Number(meridiem[2] ?? '0');
-    const suffix = meridiem[3]!.toLowerCase();
-    if (suffix === 'pm' && hour < 12) hour += 12;
-    if (suffix === 'am' && hour === 12) hour = 0;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  }
-  const twentyFour = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
-  if (twentyFour) {
-    return `${String(Number(twentyFour[1])).padStart(2, '0')}:${twentyFour[2]}`;
-  }
-  return null;
+  return normalizeAppointmentLocalTime(raw);
 }
 
 export function buildEndOfCallAppointmentDraft(params: {
