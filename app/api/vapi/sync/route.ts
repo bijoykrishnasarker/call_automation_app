@@ -287,6 +287,7 @@ export async function POST(request: NextRequest) {
       webhook_auth_mode: process.env.VAPI_WEBHOOK_AUTH_MODE ?? 'optional',
       synced_at: now,
       webhook_url: webhookServer?.url ?? null,
+      calendar_tools_connected: tools.length > 0 && Boolean(body.bookAppointments),
     };
 
     const structuredDataSchema = {
@@ -452,8 +453,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Configuration saved and synced with Vapi.',
+      message: tools.length > 0 && body.bookAppointments
+        ? 'Configuration saved and synced with Vapi. Calendar booking tools are connected.'
+        : body.bookAppointments
+          ? 'Settings saved, but calendar tools were NOT attached. Set APP_BASE_URL on Vercel and Sync again.'
+          : 'Configuration saved and synced with Vapi.',
       settings: settingsRow,
+      webhookUrl: webhookServer?.url ?? null,
+      calendarToolsConnected: tools.length > 0 && Boolean(body.bookAppointments),
     });
   } catch (e) {
     console.error('[POST /api/vapi/sync]', e);

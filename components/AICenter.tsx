@@ -172,6 +172,8 @@ export const AICenter: React.FC = () => {
     const [isTestingVoice, setIsTestingVoice] = useState(false);
     const [isTraining, setIsTraining] = useState(false);
     const [vapiAssistantId, setVapiAssistantId] = useState<string | null>(null);
+    const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+    const [calendarToolsConnected, setCalendarToolsConnected] = useState(false);
     const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
     const endingCallRef = useRef(false);
 
@@ -197,9 +199,11 @@ export const AICenter: React.FC = () => {
                     }
                     return;
                 }
-                const { settings, connected_phone_number, vapi_assistant_id } = await fetchAiReceptionistSettings(session.access_token);
+                const { settings, connected_phone_number, vapi_assistant_id, webhook_url, calendar_tools_connected } = await fetchAiReceptionistSettings(session.access_token);
                 if (!cancelled) {
                     setVapiAssistantId(vapi_assistant_id);
+                    setWebhookUrl(webhook_url);
+                    setCalendarToolsConnected(Boolean(calendar_tools_connected));
                     if (settings === null) {
                         setFormData(FORM_DEFAULTS);
                     } else {
@@ -355,9 +359,15 @@ export const AICenter: React.FC = () => {
             const vapiData = await vapiRes.json().catch(() => ({}));
             if (vapiRes.ok) {
                 vapiMessage = (vapiData as { message?: string }).message ?? 'Settings saved and synced with Vapi.';
+                const connected = Boolean((vapiData as { calendarToolsConnected?: boolean }).calendarToolsConnected);
+                const url = (vapiData as { webhookUrl?: string | null }).webhookUrl ?? null;
+                setCalendarToolsConnected(connected);
+                setWebhookUrl(url);
                 try {
                     const fresh = await fetchAiReceptionistSettings(accessToken);
                     setVapiAssistantId(fresh.vapi_assistant_id);
+                    setWebhookUrl(fresh.webhook_url);
+                    setCalendarToolsConnected(Boolean(fresh.calendar_tools_connected));
                 } catch (e) {
                     console.warn('Failed to reload fresh settings:', e);
                 }
@@ -1134,12 +1144,23 @@ export const AICenter: React.FC = () => {
                                     <label className="flex justify-between items-center"><span className="text-sm text-slate-700 dark:text-slate-300">Save incomplete contacts as Needs Review</span><input type="checkbox" checked={formData.saveIncompleteAsReview} onChange={(e) => setFormData({ ...formData, saveIncompleteAsReview: e.target.checked })} className="accent-lime-600" disabled={isLoadingInitial || isSaving} /></label>
                                 </div>
                                 <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                                    <h5 className="text-xs font-bold text-slate-500 uppercase">Webhook Status</h5>
-                                    <p className="text-sm font-mono mt-1 text-slate-700 dark:text-slate-300">URL: {typeof window !== 'undefined' ? window.location.origin + '/api/vapi/webhook' : ''}</p>
-                                    <p className="text-sm mt-1 text-slate-600 dark:text-slate-400">Status: <span className="text-lime-600 font-bold">Configured</span></p>
-                                    {typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
-                                        <p className="text-xs text-red-500 mt-2">Warning: Webhook uses localhost. Vapi requires a public URL (like ngrok) to send call events!</p>
-                                    )}
+                                    <h5 className="text-xs font-bold text-slate-500 uppercase">Calendar & Webhook</h5>
+                                    <p className="text-sm font-mono mt-1 text-slate-700 dark:text-slate-300 break-all">
+                                        Webhook: {webhookUrl ?? 'Not set — click Sync with Vapi'}
+                                    </p>
+                                    <p className="text-sm mt-1 text-slate-600 dark:text-slate-400">
+                                        Calendar tools:{' '}
+                                        <span className={calendarToolsConnected && formData.bookAppointments ? 'text-lime-600 font-bold' : 'text-red-600 font-bold'}>
+                                            {calendarToolsConnected && formData.bookAppointments
+                                                ? 'Connected (AI can check & book appointments)'
+                                                : !formData.bookAppointments
+                                                  ? 'Off — turn on Book appointments above'
+                                                  : 'NOT connected — Sync with Vapi after setting APP_BASE_URL on Vercel'}
+                                        </span>
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                                        The AI does not open the Calendar page. During a call it uses tools that read/write your Supabase <code className="font-mono">bookings</code> table — the Calendar page shows the same data.
+                                    </p>
                                 </div>
                             </div>
                             {/* Recent Call Activity */}

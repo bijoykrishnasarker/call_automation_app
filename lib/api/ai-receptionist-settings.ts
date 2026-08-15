@@ -32,6 +32,9 @@ export interface GetSettingsResponse {
   /** Primary line from `vapi_phone_numbers` (read-only display). */
   connected_phone_number: string | null;
   vapi_assistant_id: string | null;
+  webhook_url: string | null;
+  calendar_tools_connected: boolean;
+  last_synced_at: string | null;
 }
 
 export interface PostSettingsBody {

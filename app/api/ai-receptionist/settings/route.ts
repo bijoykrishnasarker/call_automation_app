@@ -141,16 +141,28 @@ export async function GET(request: NextRequest) {
 
   const { data: assistantRow } = await supabase
     .from('vapi_assistants')
-    .select('vapi_assistant_id')
+    .select('vapi_assistant_id, assistant_metadata, last_synced_at')
     .eq('organization_id', organizationId)
     .eq('is_primary', true)
     .maybeSingle();
+
+  const metadata = (assistantRow?.assistant_metadata ?? {}) as {
+    webhook_url?: string | null;
+    calendar_tools_connected?: boolean;
+  };
+  const webhookUrl = typeof metadata.webhook_url === 'string' ? metadata.webhook_url : null;
+  const calendarToolsConnected = Boolean(
+    metadata.calendar_tools_connected ?? (webhookUrl && data?.can_book_appointments)
+  );
 
   const settings = normalizeSettingsRow(data as unknown as AiReceptionistSettingsRow | null);
   const body: AiReceptionistSettingsResponse = {
     settings,
     connected_phone_number: phoneRow?.e164_number ?? null,
     vapi_assistant_id: assistantRow?.vapi_assistant_id ?? null,
+    webhook_url: webhookUrl,
+    calendar_tools_connected: calendarToolsConnected,
+    last_synced_at: assistantRow?.last_synced_at ?? null,
   };
   return NextResponse.json(body);
 }

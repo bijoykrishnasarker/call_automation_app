@@ -4,6 +4,11 @@ export interface AiReceptionistSettingsResponse {
   /** Primary org line from `vapi_phone_numbers`; not stored on `ai_receptionists`. */
   connected_phone_number: string | null;
   vapi_assistant_id: string | null;
+  /** From last Vapi sync — null until you Save / Sync with Vapi. */
+  webhook_url: string | null;
+  /** True when check_availability + book_appointment tools were attached on last sync. */
+  calendar_tools_connected: boolean;
+  last_synced_at: string | null;
 }
 
 /**
