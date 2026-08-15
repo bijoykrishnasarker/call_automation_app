@@ -181,4 +181,44 @@ describe('normalizeVapiWebhook', () => {
     expect(toolCall.availability_request?.timezone).toBe('Asia/Dhaka');
     expect(toolCall.validation_errors).toHaveLength(0);
   });
+
+  it('books an appointment from a web call with name and email but no phone', () => {
+    const payload = {
+      message: {
+        type: 'tool-calls',
+        call: {
+          id: 'call_web_001',
+          metadata: { organization_id: 'org_001' },
+        },
+        toolCallList: [
+          {
+            id: 'tool_web_001',
+            name: 'book_appointment',
+            parameters: {
+              customerName: 'Rahim Khan',
+              customerEmail: 'rahim@gmail.com',
+              startAt: '2026-08-16T15:30:00+06:00',
+              endAt: '2026-08-16T16:00:00+06:00',
+              timezone: 'Asia/Dhaka',
+              subject: 'Consultation',
+            },
+          },
+        ],
+      },
+    };
+
+    const envelope = normalizeVapiWebhook({
+      payload,
+      rawBody: JSON.stringify(payload),
+      receivedAt: '2026-08-16T09:00:00.000Z',
+      authContext,
+      headers: new Headers(),
+    });
+
+    const toolCall = envelope.tool_calls[0]!;
+    expect(toolCall.contact?.first_name).toBe('Rahim');
+    expect(toolCall.contact?.email).toBe('rahim@gmail.com');
+    expect(toolCall.appointment?.start_time_utc).toBe('2026-08-16T09:30:00.000Z');
+    expect(toolCall.validation_errors).toHaveLength(0);
+  });
 });

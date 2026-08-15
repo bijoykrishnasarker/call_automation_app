@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { isMissingColumnError } from '@/lib/ai-receptionist/supabase-errors';
 import { buildAvailabilityResult, type AvailabilityResult } from '@/lib/vapi/availability';
 import { registerProjection } from '@/lib/vapi/idempotency';
 import { logVapiInfo, logVapiWarn } from '@/lib/vapi/logger';
@@ -165,7 +166,7 @@ export async function upsertCanonicalContact(params: {
     .eq('external_contact_id', contact.external_contact_id)
     .maybeSingle();
 
-  const { data: existingByPhone } = existingByExternal?.id
+  const { data: existingByPhone } = existingByExternal?.id || contact.primary_phone.startsWith('web:')
     ? { data: null }
     : await supabase
         .from('contacts')
@@ -176,7 +177,18 @@ export async function upsertCanonicalContact(params: {
         .limit(1)
         .maybeSingle();
 
-  const existing = existingByExternal ?? existingByPhone;
+  const { data: existingByEmail } = existingByExternal?.id || existingByPhone?.id || !contact.email
+    ? { data: null }
+    : await supabase
+        .from('contacts')
+        .select('id, email, first_name, last_name, notes, created_at')
+        .eq('user_id', ownerUserId)
+        .eq('email', contact.email)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+  const existing = existingByExternal ?? existingByPhone ?? existingByEmail;
   const nextNote = contact.notes?.trim()
     ? {
         id: getUuid(),
@@ -200,9 +212,7 @@ export async function upsertCanonicalContact(params: {
         last_name: existing.last_name || contact.last_name,
         middle_name: contact.middle_name,
         email: existing.email || contact.email || '',
-        phone: contact.primary_phone,
-        primary_phone: contact.primary_phone,
-        mobile_phone: contact.mobile_phone,
+        ...(contact.primary_phone.startsWith('web:') ? {} : { phone: contact.primary_phone, primary_phone: contact.primary_phone, mobile_phone: contact.mobile_phone }),
         company: contact.company,
         job_title: contact.job_title,
         source: contact.source,
@@ -214,7 +224,24 @@ export async function upsertCanonicalContact(params: {
       })
       .eq('id', existing.id);
 
-    if (error) throw error;
+    if (error && isMissingColumnError(error)) {
+      const { error: fallbackError } = await supabase
+        .from('contacts')
+        .update({
+          first_name: existing.first_name || contact.first_name,
+          last_name: existing.last_name || contact.last_name,
+          email: existing.email || contact.email || '',
+          ...(contact.primary_phone.startsWith('web:') ? {} : { phone: contact.primary_phone }),
+          source: contact.source,
+          notes,
+          last_activity: envelope.received_at,
+          updated_at: envelope.received_at,
+        })
+        .eq('id', existing.id);
+      if (fallbackError) throw fallbackError;
+    } else if (error) {
+      throw error;
+    }
     return { contactId: existing.id as string, decision: { outcome: 'updated' } };
   }
 
@@ -228,7 +255,7 @@ export async function upsertCanonicalContact(params: {
       last_name: contact.last_name,
       middle_name: contact.middle_name,
       email: contact.email || '',
-      phone: contact.primary_phone,
+      phone: contact.primary_phone.startsWith('web:') ? '' : contact.primary_phone,
       primary_phone: contact.primary_phone,
       mobile_phone: contact.mobile_phone,
       company: contact.company,
@@ -248,6 +275,26 @@ export async function upsertCanonicalContact(params: {
     })
     .select('id')
     .single();
+
+  if (error && isMissingColumnError(error)) {
+    const { data: fallbackInserted, error: fallbackError } = await supabase
+      .from('contacts')
+      .insert({
+        user_id: ownerUserId,
+        first_name: contact.first_name,
+        last_name: contact.last_name,
+        email: contact.email || '',
+        phone: contact.primary_phone.startsWith('web:') ? '' : contact.primary_phone,
+        status: 'New Lead',
+        source: contact.source,
+        last_activity: envelope.received_at,
+        notes,
+      })
+      .select('id')
+      .single();
+    if (fallbackError) throw fallbackError;
+    return { contactId: fallbackInserted.id as string, decision: { outcome: 'created' } };
+  }
 
   if (error) throw error;
   return { contactId: inserted.id as string, decision: { outcome: 'created' } };

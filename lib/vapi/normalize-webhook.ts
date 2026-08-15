@@ -144,7 +144,12 @@ function buildCanonicalContact(input: {
   providerContactId?: string | null;
 }): CanonicalContactProjection | null {
   const normalizedPhone = normalizePhone(input.phone);
-  if (!normalizedPhone) {
+  const fallbackPhone =
+    normalizedPhone ||
+    (input.email || input.name
+      ? `web:${(input.email ?? input.name ?? 'caller').toLowerCase().replace(/[^a-z0-9@._+-]/g, '').slice(0, 40)}`
+      : '');
+  if (!fallbackPhone) {
     if (input.phone) {
       addValidationIssue(input.validationErrors, 'contact.primary_phone', 'invalid_phone', 'Contact phone number is invalid.');
     }
@@ -154,13 +159,13 @@ function buildCanonicalContact(input: {
   const nameParts = splitFullName(input.name);
 
   return {
-    external_contact_id: buildExternalContactId(input.organizationId, normalizedPhone, input.providerContactId),
+    external_contact_id: buildExternalContactId(input.organizationId, fallbackPhone, input.providerContactId),
     first_name: nameParts.firstName,
     last_name: nameParts.lastName,
     middle_name: nameParts.middleName,
     email: input.email?.toLowerCase() ?? null,
-    primary_phone: normalizedPhone,
-    mobile_phone: normalizedPhone,
+    primary_phone: fallbackPhone,
+    mobile_phone: normalizedPhone || null,
     company: null,
     job_title: null,
     source: input.source,

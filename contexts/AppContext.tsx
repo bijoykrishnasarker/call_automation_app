@@ -164,19 +164,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return;
         }
         let cancelled = false;
-        setBookingsLoading(true);
-        setBookingsError(null);
-        fetchBookings(user.id)
-            .then(rows => {
-                if (!cancelled) setBookingRows(rows);
-            })
-            .catch(err => {
-                if (!cancelled) setBookingsError(err?.message ?? 'Failed to load bookings');
-            })
-            .finally(() => {
-                if (!cancelled) setBookingsLoading(false);
-            });
-        return () => { cancelled = true; };
+
+        const loadBookings = (showSpinner: boolean) => {
+            if (showSpinner) {
+                setBookingsLoading(true);
+                setBookingsError(null);
+            }
+            fetchBookings(user.id)
+                .then(rows => {
+                    if (!cancelled) setBookingRows(rows);
+                })
+                .catch(err => {
+                    if (!cancelled) setBookingsError(err?.message ?? 'Failed to load bookings');
+                })
+                .finally(() => {
+                    if (!cancelled && showSpinner) setBookingsLoading(false);
+                });
+        };
+
+        const loadContacts = () => {
+            fetchContacts(user.id)
+                .then(data => {
+                    if (!cancelled) setContacts(data);
+                })
+                .catch(() => {
+                    /* keep existing contacts */
+                });
+        };
+
+        loadBookings(true);
+
+        const onFocus = () => {
+            loadBookings(false);
+            loadContacts();
+        };
+        window.addEventListener('focus', onFocus);
+        const interval = window.setInterval(onFocus, 8000);
+
+        return () => {
+            cancelled = true;
+            window.removeEventListener('focus', onFocus);
+            window.clearInterval(interval);
+        };
     }, [user?.id]);
 
     const getContactName = useCallback((contactId: string) => {

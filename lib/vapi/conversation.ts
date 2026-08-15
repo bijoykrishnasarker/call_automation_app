@@ -8,6 +8,9 @@ export function normalizePhone(raw: unknown): string {
   if (!digits || digits.length < 7 || digits.length > 15) return '';
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  // Bangladesh local numbers: 01XXXXXXXXX
+  if (digits.length === 11 && digits.startsWith('01')) return `+88${digits}`;
+  if (digits.length === 13 && digits.startsWith('880')) return `+${digits}`;
   return `+${digits}`;
 }
 

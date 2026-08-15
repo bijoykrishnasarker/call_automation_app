@@ -104,7 +104,7 @@ export function buildBookingWebhookTools(
               description: 'Short summary of what they booked.',
             },
           },
-          required: ['customerName', 'customerPhone', 'customerEmail', 'startAt', 'endAt', 'timezone', 'subject'],
+            required: ['customerName', 'startAt', 'endAt', 'timezone', 'subject'],
         },
       },
     });
