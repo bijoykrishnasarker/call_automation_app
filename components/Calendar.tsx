@@ -174,6 +174,17 @@ export const Calendar: React.FC = () => {
         return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
     };
 
+    const formatApptTime = (date: Date) =>
+        date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    const formatApptTimeRange = (appt: Appointment) => {
+        const end =
+            appt.end.getTime() <= appt.start.getTime()
+                ? new Date(appt.start.getTime() + 30 * 60 * 1000)
+                : appt.end;
+        return `${formatApptTime(appt.start)} – ${formatApptTime(end)}`;
+    };
+
     const getHeaderText = () => {
         if (view === 'Day') return currentDate.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
         if (view === 'Month') return currentDate.toLocaleDateString('default', { month: 'long', year: 'numeric' });
@@ -265,7 +276,7 @@ export const Calendar: React.FC = () => {
                                 </div>
 
                                 <div className="space-y-1">
-                                    {dayAppts.map(appt => {
+                                    {dayAppts.slice(0, 3).map(appt => {
                                         const theme = getApptTheme(appt.type);
                                         return (
                                             <button
@@ -274,12 +285,22 @@ export const Calendar: React.FC = () => {
                                                 onClick={() => openEventDetail(appt)}
                                                 onMouseEnter={(e) => handleEventMouseEnter(appt, e)}
                                                 onMouseLeave={handleEventMouseLeave}
-                                                className={`w-full text-left text-[10px] font-medium truncate px-2 py-1 rounded border-l-2 ${theme.bg} ${theme.text} ${theme.border} ${theme.hover} transition-all duration-150 cursor-pointer`}
+                                                className={`w-full text-left rounded-md border-l-[3px] px-1.5 py-1 shadow-sm ${theme.bg} ${theme.text} ${theme.border} ${theme.hover} transition-all duration-150 cursor-pointer`}
                                             >
-                                                <span className="font-semibold">{appt.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}</span> {appt.title}
+                                                <div className="text-[11px] font-bold leading-tight truncate">
+                                                    {appt.title || 'Appointment'}
+                                                </div>
+                                                <div className="text-[10px] leading-tight opacity-90 truncate">
+                                                    {formatApptTimeRange(appt)}
+                                                </div>
                                             </button>
                                         );
                                     })}
+                                    {dayAppts.length > 3 && (
+                                        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-1">
+                                            +{dayAppts.length - 3} more
+                                        </p>
+                                    )}
                                 </div>
                                 {/* Add Button on Hover */}
                                 <button
@@ -606,7 +627,7 @@ export const Calendar: React.FC = () => {
                         <div className="font-bold text-sm mb-1">{appt.title}</div>
                         <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                             <Clock className="w-3 h-3 flex-shrink-0" />
-                            {appt.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {appt.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatApptTimeRange(appt)}
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5 text-slate-600 dark:text-slate-300">
                             <User className="w-3 h-3 flex-shrink-0" />

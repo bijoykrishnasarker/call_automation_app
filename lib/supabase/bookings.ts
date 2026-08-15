@@ -15,13 +15,21 @@ export interface BookingRow {
 }
 
 function rowToAppointment(row: BookingRow, contactName: string = ''): Appointment {
+  const start = new Date(row.start_at);
+  let end = new Date(row.end_at);
+  if (Number.isNaN(start.getTime())) {
+    end = new Date(start);
+  } else if (Number.isNaN(end.getTime()) || end.getTime() <= start.getTime()) {
+    end = new Date(start.getTime() + 30 * 60 * 1000);
+  }
+
   return {
     id: row.id,
     title: row.title,
     contactId: row.contact_id,
     contactName,
-    start: new Date(row.start_at),
-    end: new Date(row.end_at),
+    start,
+    end,
     type: row.type as Appointment['type'],
     status: row.status as Appointment['status'],
   };

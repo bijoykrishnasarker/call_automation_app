@@ -174,6 +174,10 @@ export function resolveAppointmentWindow(input: {
       return null;
     }
 
+    if (end.getTime() <= start.getTime()) {
+      end = new Date(start.getTime() + Math.max(30, Math.floor(input.durationMinutes ?? 30)) * 60_000);
+    }
+
     const effectiveTimezone = timezone ?? 'UTC';
     if (!timezone) warnings.push('timezone_missing_falling_back_to_utc');
 
