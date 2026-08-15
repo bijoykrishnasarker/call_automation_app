@@ -45,13 +45,13 @@ export function buildBookingWebhookTools(
       function: {
         name: 'check_availability',
         description:
-          'Check if a calendar slot is free. Call before booking. Use ISO8601 for times.',
+          'Check the business calendar. Call this BEFORE booking. If the requested time is already taken, tell the caller that time is booked and offer the suggestedSlots display times (for example 3:30 PM).',
         parameters: {
           type: 'object',
           properties: {
             requestedStartAt: {
               type: 'string',
-              description: 'Requested slot start in ISO8601 format.',
+              description: 'Requested slot start. ISO8601 with offset, or local datetime like 2026-08-16T15:00.',
             },
             durationMinutes: {
               type: 'number',
@@ -59,14 +59,22 @@ export function buildBookingWebhookTools(
             },
             timezone: {
               type: 'string',
-              description: 'IANA timezone for the appointment, for example Asia/Dhaka or America/New_York.',
+              description: 'IANA timezone, for example Asia/Dhaka. Required so 3pm is the caller local time.',
+            },
+            localDate: {
+              type: 'string',
+              description: 'Optional calendar date YYYY-MM-DD if you do not have ISO requestedStartAt.',
+            },
+            localTime: {
+              type: 'string',
+              description: 'Optional local time HH:mm (24-hour), for example 15:00 for 3:00 PM.',
             },
             requestedEndAt: {
               type: 'string',
               description: 'Optional explicit end time ISO8601.',
             },
           },
-          required: ['requestedStartAt', 'durationMinutes', 'timezone'],
+          required: ['durationMinutes', 'timezone'],
         },
       },
     });
@@ -77,7 +85,7 @@ export function buildBookingWebhookTools(
       function: {
         name: 'book_appointment',
         description:
-          'Create a confirmed appointment after the caller agrees on a specific slot from check_availability.',
+          'Save a confirmed appointment to the business calendar. Only call after check_availability says the slot is free and the caller confirmed it. The event will appear on the Calendar page.',
         parameters: {
           type: 'object',
           properties: {

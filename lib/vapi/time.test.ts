@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { resolveAppointmentWindow } from '@/lib/vapi/time';
+import { parseFlexibleDateTime, resolveAppointmentWindow } from '@/lib/vapi/time';
 
 const originalFallback = process.env.VAPI_WEBHOOK_DST_FALLBACK_MODE;
 
@@ -64,5 +64,13 @@ describe('resolveAppointmentWindow', () => {
     expect(earlier?.start_time_utc).not.toBe(later?.start_time_utc);
     expect(earlier?.warnings.some(w => w.includes('ambiguous_dst_time_resolved'))).toBe(true);
     expect(later?.warnings.some(w => w.includes('ambiguous_dst_time_resolved'))).toBe(true);
+  });
+});
+
+describe('parseFlexibleDateTime', () => {
+  it('treats naive 3pm as Asia/Dhaka local time', () => {
+    const parsed = parseFlexibleDateTime('2026-08-16T15:00', 'Asia/Dhaka');
+    expect(parsed).not.toBeNull();
+    expect(parsed?.toISOString()).toBe('2026-08-16T09:00:00.000Z');
   });
 });

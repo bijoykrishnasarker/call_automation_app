@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { buildAvailabilityResult, type AvailabilityResult } from '@/lib/vapi/availability';
 import { registerProjection } from '@/lib/vapi/idempotency';
 import { logVapiInfo, logVapiWarn } from '@/lib/vapi/logger';
+import { DEFAULT_BUSINESS_TIMEZONE, parseFlexibleDateTime } from '@/lib/vapi/time';
 import type {
   CanonicalAppointmentProjection,
   CanonicalContactProjection,
@@ -251,29 +253,46 @@ export async function upsertCanonicalContact(params: {
   return { contactId: inserted.id as string, decision: { outcome: 'created' } };
 }
 
+export class SlotUnavailableError extends Error {
+  availability: AvailabilityResult;
+
+  constructor(availability: AvailabilityResult) {
+    super(JSON.stringify({
+      error: 'slot_unavailable',
+      message: availability.message,
+      suggestedSlots: availability.suggestedSlots,
+    }));
+    this.name = 'SlotUnavailableError';
+    this.availability = availability;
+  }
+}
+
 export async function checkAvailability(params: {
   supabase: SupabaseClient;
   userId: string;
   requestedStartAt: string;
   durationMinutes: number;
   requestedEndAt?: string | null;
+  timezone?: string | null;
   suggestionsCount?: number;
   suggestionWindowDays?: number;
-}) {
+}): Promise<AvailabilityResult> {
   const {
     supabase,
     userId,
     requestedStartAt,
     durationMinutes,
     requestedEndAt,
+    timezone,
     suggestionsCount = 3,
     suggestionWindowDays = 7,
   } = params;
 
-  const start = new Date(requestedStartAt);
-  if (Number.isNaN(start.getTime())) throw new Error('Invalid requestedStartAt.');
-  const end = requestedEndAt ? new Date(requestedEndAt) : new Date(start.getTime() + durationMinutes * 60 * 1000);
-  if (Number.isNaN(end.getTime())) throw new Error('Invalid requestedEndAt.');
+  const tz = timezone?.trim() || DEFAULT_BUSINESS_TIMEZONE;
+  const start = parseFlexibleDateTime(requestedStartAt, tz);
+  if (!start) throw new Error('Invalid requestedStartAt.');
+  const parsedEnd = requestedEndAt ? parseFlexibleDateTime(requestedEndAt, tz) : null;
+  const end = parsedEnd ?? new Date(start.getTime() + Math.max(1, durationMinutes) * 60 * 1000);
 
   const windowEnd = new Date(start.getTime() + suggestionWindowDays * 24 * 60 * 60 * 1000).toISOString();
   const { data: bookings, error } = await supabase
@@ -284,33 +303,19 @@ export async function checkAvailability(params: {
     .gt('end_at', start.toISOString());
 
   if (error) throw error;
-  const intervals = (bookings ?? []).map((booking: any) => ({
+  const busy = (bookings ?? []).map((booking: { start_at: string; end_at: string }) => ({
     start: new Date(booking.start_at).getTime(),
     end: new Date(booking.end_at).getTime(),
   }));
 
-  const overlaps = intervals.some(interval => start.getTime() < interval.end && end.getTime() > interval.start);
-  if (!overlaps) {
-    return {
-      isAvailable: true,
-      suggestedSlots: [{ startAt: start.toISOString(), endAt: end.toISOString() }],
-    };
-  }
-
-  const suggestedSlots: Array<{ startAt: string; endAt: string }> = [];
-  let cursor = start.getTime() + 30 * 60 * 1000;
-  while (suggestedSlots.length < suggestionsCount) {
-    const candidateStart = new Date(cursor);
-    const candidateEnd = new Date(cursor + durationMinutes * 60 * 1000);
-    if (candidateEnd.getTime() > new Date(windowEnd).getTime()) break;
-    const candidateConflict = intervals.some(interval => candidateStart.getTime() < interval.end && candidateEnd.getTime() > interval.start);
-    if (!candidateConflict) {
-      suggestedSlots.push({ startAt: candidateStart.toISOString(), endAt: candidateEnd.toISOString() });
-    }
-    cursor += 30 * 60 * 1000;
-  }
-
-  return { isAvailable: false, suggestedSlots };
+  return buildAvailabilityResult({
+    requestedStart: start,
+    requestedEnd: end,
+    busy,
+    timezone: tz,
+    suggestionsCount,
+    suggestionWindowDays,
+  });
 }
 
 export async function upsertCanonicalAppointment(params: {
@@ -341,21 +346,19 @@ export async function upsertCanonicalAppointment(params: {
       .gt('end_at', appointment.start_time_utc);
 
     if ((conflicts ?? []).length > 0) {
-      const availability = await checkAvailability({
-        supabase,
-        userId: ownerUserId,
-        requestedStartAt: appointment.start_time_utc,
-        requestedEndAt: appointment.end_time_utc,
-        durationMinutes: appointment.duration_minutes,
-      });
+        const availability = await checkAvailability({
+          supabase,
+          userId: ownerUserId,
+          requestedStartAt: appointment.start_time_utc,
+          requestedEndAt: appointment.end_time_utc,
+          durationMinutes: appointment.duration_minutes,
+          timezone: appointment.timezone,
+        });
 
-      throw new Error(JSON.stringify({
-        error: 'slot_unavailable',
-        suggestedSlots: availability.suggestedSlots,
-      }));
+      throw new SlotUnavailableError(availability);
     }
 
-    const { data: booking } = await supabase
+    const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
         user_id: ownerUserId,
@@ -368,6 +371,7 @@ export async function upsertCanonicalAppointment(params: {
       })
       .select('id')
       .single();
+    if (bookingError) throw bookingError;
     bookingId = (booking?.id as string | undefined) ?? null;
   } else {
     await supabase
@@ -415,7 +419,7 @@ export async function upsertCanonicalAppointment(params: {
     };
   }
 
-  const { data: inserted } = await supabase
+  const { data: inserted, error: appointmentInsertError } = await supabase
     .from('appointments')
     .insert({
       organization_id: organizationId,
@@ -444,6 +448,19 @@ export async function upsertCanonicalAppointment(params: {
     .select('id')
     .single();
 
+  if (appointmentInsertError || !inserted?.id) {
+    logVapiWarn('vapi.appointment.projection_skipped', {
+      organization_id: organizationId,
+      booking_id: bookingId,
+      message: appointmentInsertError?.message ?? 'appointments insert returned no id',
+    });
+    return {
+      appointmentId: bookingId ?? getUuid(),
+      bookingId,
+      decision: { outcome: 'created' },
+    };
+  }
+
   return {
     appointmentId: inserted.id as string,
     bookingId,
@@ -466,6 +483,8 @@ export async function executeToolCalls(params: {
     .eq('organization_id', organizationId)
     .maybeSingle();
 
+  const bookingEnabled = settings?.can_book_appointments !== false;
+  const messagesEnabled = settings?.can_take_messages !== false;
   const results: Array<{ toolCallId: string; result?: string; error?: string }> = [];
   for (const toolCall of toolCalls) {
     try {
@@ -478,7 +497,7 @@ export async function executeToolCalls(params: {
       }
 
       if (toolCall.name === 'take_message') {
-        if (!settings?.can_take_messages) {
+        if (!messagesEnabled) {
           results.push({ toolCallId: toolCall.id, error: 'Tool take_message is not enabled.' });
           continue;
         }
@@ -518,7 +537,7 @@ export async function executeToolCalls(params: {
       }
 
       if (toolCall.name === 'check_availability') {
-        if (!settings?.can_book_appointments) {
+        if (!bookingEnabled) {
           results.push({ toolCallId: toolCall.id, error: 'Tool check_availability is not enabled.' });
           continue;
         }
@@ -534,6 +553,7 @@ export async function executeToolCalls(params: {
           requestedStartAt: toolCall.availability_request.requested_start_at,
           requestedEndAt: toolCall.availability_request.requested_end_at,
           durationMinutes: toolCall.availability_request.duration_minutes,
+          timezone: toolCall.availability_request.timezone,
         });
 
         results.push({ toolCallId: toolCall.id, result: JSON.stringify(availability) });
@@ -541,7 +561,7 @@ export async function executeToolCalls(params: {
       }
 
       if (toolCall.name === 'book_appointment') {
-        if (!settings?.can_book_appointments) {
+        if (!bookingEnabled) {
           results.push({ toolCallId: toolCall.id, error: 'Tool book_appointment is not enabled.' });
           continue;
         }
@@ -551,14 +571,14 @@ export async function executeToolCalls(params: {
           continue;
         }
 
+        const contactResult = await upsertCanonicalContact({
+          supabase,
+          organizationId,
+          ownerUserId,
+          contact: toolCall.contact,
+          envelope,
+        });
         try {
-          const contactResult = await upsertCanonicalContact({
-            supabase,
-            organizationId,
-            ownerUserId,
-            contact: toolCall.contact,
-            envelope,
-          });
           const appointmentResult = await upsertCanonicalAppointment({
             supabase,
             organizationId,
@@ -582,25 +602,19 @@ export async function executeToolCalls(params: {
               booked: true,
               appointmentId: appointmentResult.appointmentId,
               bookingId: appointmentResult.bookingId,
+              message: 'Appointment saved on the calendar. Confirm the time with the caller.',
             }),
           });
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : '';
-          if (errMsg.includes('slot_unavailable')) {
-            let suggested: any[] = [];
-            try {
-              suggested = JSON.parse(errMsg).suggestedSlots || [];
-            } catch {
-              // ignore parse errors
-            }
+          if (err instanceof SlotUnavailableError) {
             results.push({
               toolCallId: toolCall.id,
               result: JSON.stringify({
                 booked: false,
                 error: 'slot_unavailable',
-                message: 'This slot is already booked.',
-                suggestedSlots: suggested
-              })
+                message: err.availability.message,
+                suggestedSlots: err.availability.suggestedSlots,
+              }),
             });
           } else {
             throw err;
@@ -611,6 +625,18 @@ export async function executeToolCalls(params: {
 
       results.push({ toolCallId: toolCall.id, error: `Tool ${toolCall.name} not enabled or not supported` });
     } catch (error) {
+      if (error instanceof SlotUnavailableError) {
+        results.push({
+          toolCallId: toolCall.id,
+          result: JSON.stringify({
+            booked: false,
+            error: 'slot_unavailable',
+            message: error.availability.message,
+            suggestedSlots: error.availability.suggestedSlots,
+          }),
+        });
+        continue;
+      }
       const message = error instanceof Error ? error.message : 'Tool execution failed';
       logVapiWarn('vapi.tool.error', {
         organization_id: organizationId,
@@ -652,7 +678,8 @@ export async function persistEnvelope(params: {
   }
 
   let appointmentResult: { appointmentId: string; bookingId: string | null; decision: ProjectionDecision } | null = null;
-  if (envelope.appointment && contactResult) {
+  const bookedViaTool = envelope.tool_calls.some(toolCall => toolCall.name === 'book_appointment');
+  if (envelope.appointment && contactResult && !bookedViaTool && envelope.provider_event_type !== 'tool-calls') {
     try {
       appointmentResult = await upsertCanonicalAppointment({
         supabase,
@@ -663,16 +690,15 @@ export async function persistEnvelope(params: {
         contactId: contactResult.contactId,
         appointment: envelope.appointment,
       });
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : '';
-      if (errMsg.includes('slot_unavailable')) {
+    } catch (error) {
+      if (error instanceof SlotUnavailableError) {
         logVapiWarn('vapi.projection.appointment.slot_conflict', {
           organization_id: organizationId,
           provider_call_id: envelope.provider_call_id,
-          message: 'Appointment projection skipped due to slot conflict',
+          message: error.availability.message,
         });
       } else {
-        throw e;
+        throw error;
       }
     }
   }

@@ -139,4 +139,46 @@ describe('normalizeVapiWebhook', () => {
     expect(toolCall.appointment).toBeNull();
     expect(toolCall.validation_errors.some(issue => issue.code === 'invalid_appointment_window')).toBe(true);
   });
+
+  it('reads Vapi nested function.name and function.arguments', () => {
+    const payload = {
+      message: {
+        type: 'tool-calls',
+        call: {
+          id: 'call_004',
+          from: { number: '+8801711111111' },
+          metadata: { organization_id: 'org_001' },
+        },
+        toolCalls: [
+          {
+            id: 'tool_004',
+            type: 'function',
+            function: {
+              name: 'check_availability',
+              arguments: JSON.stringify({
+                localDate: '2026-08-16',
+                localTime: '15:00',
+                durationMinutes: 30,
+                timezone: 'Asia/Dhaka',
+              }),
+            },
+          },
+        ],
+      },
+    };
+
+    const envelope = normalizeVapiWebhook({
+      payload,
+      rawBody: JSON.stringify(payload),
+      receivedAt: '2026-08-16T09:00:00.000Z',
+      authContext,
+      headers: new Headers(),
+    });
+
+    const toolCall = envelope.tool_calls[0]!;
+    expect(toolCall.name).toBe('check_availability');
+    expect(toolCall.availability_request?.requested_start_at).toBe('2026-08-16T15:00');
+    expect(toolCall.availability_request?.timezone).toBe('Asia/Dhaka');
+    expect(toolCall.validation_errors).toHaveLength(0);
+  });
 });

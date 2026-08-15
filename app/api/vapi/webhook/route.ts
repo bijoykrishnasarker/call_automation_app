@@ -9,15 +9,15 @@ export async function POST(request: NextRequest) {
   }
 
   const rawBody = await request.text();
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
-    payload = JSON.parse(rawBody);
+    payload = JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: 'Bad Request', message: 'Invalid JSON body' }, { status: 400 });
   }
 
   const supabase = createSupabaseServiceClient();
-  const requestId = request.headers.get('x-request-id') || Math.random().toString();
+  const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
 
   try {
     const response = await handleVapiWebhook({

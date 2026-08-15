@@ -70,13 +70,12 @@ function buildSystemPrompt(settings: {
     parts.push(
       `# Appointment booking workflow\n` +
         `When the caller asks to book an appointment (or mentions a preferred date/time), do this:\n` +
-        `1) Extract requestedStartAt as an ISO8601 string and estimate durationMinutes (default 30 if not specified).\n` +
-        `2) Call the tool \`check_availability\` with { "requestedStartAt": "<iso>", "durationMinutes": <number> }.\n` +
-        `3) If isAvailable is false, present suggestedSlots and ask the caller to confirm one of them.\n` +
-        `4) After confirmation, call the tool \`book_appointment\` with:\n` +
-        `   { "customerName": "<caller name>", "customerPhone": "<caller phone>", "startAt": "<confirmed start iso>", "endAt": "<confirmed end iso>", "callNotes": "<short summary>" }.\n` +
-        `5) If booking fails because the slot is no longer available, call \`check_availability\` again and ask the caller to pick from the updated suggestedSlots.\n` +
-        `For v1, create the booking with type='Service' and title='Appointment'.`
+        `1) Collect name, phone, and email, plus the requested date and time.\n` +
+        `2) Call \`check_availability\` with timezone "Asia/Dhaka" unless the caller said another timezone.\n` +
+        `3) If isAvailable is false, tell the caller that time is already booked and offer the suggestedSlots display times.\n` +
+        `4) After they confirm an open slot, call \`book_appointment\`. That saves the event on the calendar.\n` +
+        `5) If booking returns slot_unavailable, offer the updated suggested times.\n` +
+        `Never confirm a booking until book_appointment returns booked=true.`
     );
   }
 

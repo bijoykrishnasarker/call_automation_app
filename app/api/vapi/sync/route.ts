@@ -115,13 +115,14 @@ function compileSystemPrompt(body: SyncBody): string {
   if (bookAppointments) {
     sections.push(
       `# Appointment booking workflow\n` +
-      `Once you have the caller's confirmed name, phone, and email, follow these steps:\n` +
-      `1) Extract the requested start time as an ISO8601 string (requestedStartAt), determine the caller's IANA timezone, and estimate durationMinutes (default 30 if not specified).\n` +
-      `2) Call the tool \`check_availability\` with { "requestedStartAt": "<iso>", "durationMinutes": <number>, "timezone": "<iana>" }.\n` +
-      `3) If the tool says isAvailable is false, tell the caller the slot is taken and share the suggestedSlots (next available times). Ask which they prefer.\n` +
-      `4) Once the caller confirms a specific slot, call the tool \`book_appointment\` with:\n` +
-      `   { "customerName": "<caller full name>", "customerPhone": "<caller phone>", "customerEmail": "<caller email>", "startAt": "<confirmed start iso>", "endAt": "<confirmed end iso>", "timezone": "<iana>", "subject": "<service>", "callNotes": "<short summary>" }.\n` +
-      `5) If booking fails because the slot is no longer available, call \`check_availability\` again and offer updated slots.`
+      `The business calendar is the source of truth. Never guess whether a time is free.\n` +
+      `When the caller wants an appointment:\n` +
+      `1) Collect name, phone, and email, plus the requested date and time.\n` +
+      `2) Call \`check_availability\` with timezone "Asia/Dhaka" unless the caller said another timezone. Use requestedStartAt or localDate+localTime. durationMinutes defaults to 30.\n` +
+      `3) If isAvailable is false, say clearly: that time is already booked, please choose another time. Read the suggestedSlots display times (example: 3:30 PM) and wait for the caller to pick one.\n` +
+      `4) Never say a booking is confirmed until \`book_appointment\` returns booked=true.\n` +
+      `5) After the caller confirms an open slot, call \`book_appointment\`. That writes the event to the calendar.\n` +
+      `6) If book_appointment returns booked=false / slot_unavailable, tell the caller the time was just taken and offer the new suggestedSlots.`
     );
   }
 

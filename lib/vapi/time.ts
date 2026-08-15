@@ -25,7 +25,7 @@ function parseIsoTimestamp(raw: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function getZonedParts(epochMs: number, timezone: string) {
+export function getZonedParts(epochMs: number, timezone: string) {
   const formatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone,
     hour12: false,
@@ -258,8 +258,47 @@ export function resolveAppointmentWindow(input: {
   };
 }
 
-export function inferDefaultTimezone(): string | null {
+export const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Dhaka';
+
+export function inferDefaultTimezone(): string {
   const timezone = process.env.VAPI_DEFAULT_TIMEZONE?.trim();
-  if (!timezone) return null;
-  return ensureIanaTimeZone(timezone);
+  return ensureIanaTimeZone(timezone ?? '') ?? DEFAULT_BUSINESS_TIMEZONE;
+}
+
+/** Parse ISO with offset, or naive local datetime like `2026-08-16T15:00` in `timezone`. */
+export function parseFlexibleDateTime(raw: string, timezone: string): Date | null {
+  const withOffset = parseIsoTimestamp(raw);
+  if (withOffset) return withOffset;
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(raw.trim());
+  if (!match) {
+    const fallback = new Date(raw);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+
+  const iana = ensureIanaTimeZone(timezone) ?? DEFAULT_BUSINESS_TIMEZONE;
+  const conversion = localDateTimeToUtc({
+    timezone: iana,
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: Number(match[6] ?? '0'),
+    disambiguation: getDstFallbackMode(),
+  });
+  return conversion.instant;
+}
+
+export function formatSlotForCaller(isoUtc: string, timezone: string): string {
+  const iana = ensureIanaTimeZone(timezone) ?? DEFAULT_BUSINESS_TIMEZONE;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: iana,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date(isoUtc));
 }

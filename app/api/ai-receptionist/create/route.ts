@@ -153,8 +153,46 @@ export async function POST(request: NextRequest) {
     row = data as unknown as AiReceptionistSettingsRow;
   }
 
+  let vapiSyncMessage = 'Receptionist saved. Vapi sync was not attempted.';
+  try {
+    const syncUrl = new URL('/api/vapi/sync', request.url);
+    const syncRes = await fetch(syncUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        agentName,
+        voiceModel,
+        voiceSpeed,
+        businessName: body.businessName,
+        businessType: body.businessType,
+        businessAddress: body.businessAddress,
+        businessHours: body.businessHours,
+        services: body.services,
+        additionalInfo: body.additionalInfo,
+        greetingMessage: body.greetingMessage,
+        answerQuestions: body.answerQuestions,
+        bookAppointments: body.bookAppointments,
+        takeMessages: body.takeMessages,
+        transferEnabled: body.transferEnabled,
+        transferNumber: body.transferNumber,
+        afterHoursOnly: body.afterHoursOnly,
+      }),
+    });
+    const syncData = await syncRes.json().catch(() => ({}));
+    vapiSyncMessage = syncRes.ok
+      ? ((syncData as { message?: string }).message ?? 'Receptionist saved and synced with Vapi.')
+      : ((syncData as { message?: string }).message ?? 'Receptionist saved but Vapi sync failed.');
+  } catch (syncErr) {
+    console.error('[POST /api/ai-receptionist/create] vapi sync error', syncErr);
+    vapiSyncMessage = 'Receptionist saved. Vapi sync could not be reached.';
+  }
+
   return NextResponse.json({
     settings: row,
+    message: vapiSyncMessage,
   });
 }
 

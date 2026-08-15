@@ -6,7 +6,6 @@ import {
   extractPhoneFromConversation,
   gatherConversationText,
   normalizePhone,
-  parseAppointmentFromConversation,
   pickFirstString,
   splitFullName,
 } from '@/lib/vapi/conversation';
@@ -255,15 +254,19 @@ function normalizeToolCall(
     organizationId: string | null;
     providerCallId: string | null;
     occurredAt: string;
+    fromNumber?: string | null;
   }
 ): CanonicalToolCall {
   const validation_errors: CanonicalValidationIssue[] = [];
   const warnings: string[] = [];
-  const id = coerceString(toolCall.id) ?? `tool-${Math.random().toString(36).slice(2)}`;
-  const name = coerceString(toolCall.name) ?? 'unknown';
+  const fn = toolCall.function && typeof toolCall.function === 'object'
+    ? (toolCall.function as Record<string, unknown>)
+    : {};
+  const id = coerceString(toolCall.id) ?? coerceString(fn.id) ?? `tool-${Math.random().toString(36).slice(2)}`;
+  const name = coerceString(toolCall.name) ?? coerceString(fn.name) ?? 'unknown';
 
   let args: Record<string, unknown> = {};
-  const rawArgs = toolCall.parameters ?? toolCall.arguments ?? {};
+  const rawArgs = toolCall.parameters ?? toolCall.arguments ?? fn.arguments ?? fn.parameters ?? {};
   if (typeof rawArgs === 'string') {
     try {
       const parsed = JSON.parse(rawArgs);
@@ -280,6 +283,7 @@ function normalizeToolCall(
   const emailValue = pickFirstString(args.customerEmail, args.customer_email, args.email);
   const phoneValue =
     pickFirstString(args.customerPhone, args.customer_phone, args.phone, args.from_number) ??
+    context.fromNumber ??
     extractPhoneFromConversation(messageText ?? '');
 
   const contact = buildCanonicalContact({
@@ -298,13 +302,17 @@ function normalizeToolCall(
   let availability_request: CanonicalToolCall['availability_request'] = null;
 
   if (name === 'check_availability') {
-    const requestedStartAt = pickFirstString(args.requestedStartAt, args.startAt, args.requested_start_at);
+    const timezone = pickFirstString(args.timezone) ?? inferDefaultTimezone();
+    const localDate = pickFirstString(args.localDate, args.local_date, args.date);
+    const localTime = pickFirstString(args.localTime, args.local_time, args.time);
+    const requestedStartAt =
+      pickFirstString(args.requestedStartAt, args.startAt, args.requested_start_at) ??
+      (localDate && localTime ? `${localDate}T${localTime}` : undefined);
     const requestedEndAt = pickFirstString(args.requestedEndAt, args.endAt, args.requested_end_at);
     const durationMinutes = Number(args.durationMinutes ?? args.duration_minutes ?? 30);
-    const timezone = pickFirstString(args.timezone) ?? inferDefaultTimezone() ?? 'UTC';
 
     if (!requestedStartAt) {
-      addValidationIssue(validation_errors, `tool_calls.${id}.requestedStartAt`, 'missing_start', 'Availability checks require requestedStartAt.');
+      addValidationIssue(validation_errors, `tool_calls.${id}.requestedStartAt`, 'missing_start', 'Availability checks require requestedStartAt or local date and time.');
     } else {
       availability_request = {
         requested_start_at: requestedStartAt,
@@ -490,42 +498,23 @@ export function normalizeVapiWebhook(input: {
   });
 
   let appointment: CanonicalAppointmentProjection | null = null;
-  const guessedAppointment = transcript_text ? parseAppointmentFromConversation(transcript_text, new Date(occurred_at)) : null;
-  if (guessedAppointment && contact) {
-    const defaultTimezone = inferDefaultTimezone();
-    if (!defaultTimezone) {
-      warnings.push('transcript_appointment_skipped_missing_default_timezone');
-    } else {
-      appointment = buildCanonicalAppointment({
-        organizationId: organization_id,
-        providerCallId: provider_call_id,
-        contact,
-        localDate: `${guessedAppointment.year}-${String(guessedAppointment.month).padStart(2, '0')}-${String(guessedAppointment.day).padStart(2, '0')}`,
-        localTime: `${String(guessedAppointment.hour).padStart(2, '0')}:${String(guessedAppointment.minute).padStart(2, '0')}`,
-        timezone: defaultTimezone,
-        durationMinutes: guessedAppointment.durationMinutes,
-        subject: 'Appointment',
-        notes: 'Booked automatically from call transcript (AI receptionist).',
-        createdAt: occurred_at,
-        updatedAt: occurred_at,
-        validationErrors: validation_errors,
-        warnings,
-        tracePath: 'appointment',
-      });
-    }
-  }
+  // Appointments are created only via the book_appointment tool so they always
+  // go through the calendar conflict check. Transcript guesses are not persisted.
 
   const tool_calls_source = Array.isArray(message.toolCallList)
     ? message.toolCallList
-    : input.payload.toolCall
-      ? [input.payload.toolCall]
-      : [];
+    : Array.isArray(message.toolCalls)
+      ? message.toolCalls
+      : input.payload.toolCall
+        ? [input.payload.toolCall]
+        : [];
   const tool_calls = tool_calls_source
     .filter(item => item && typeof item === 'object')
     .map(item => normalizeToolCall(item as Record<string, unknown>, {
       organizationId: organization_id,
       providerCallId: provider_call_id,
       occurredAt: occurred_at,
+      fromNumber: from_number,
     }));
 
   if (!provider_call_id) {
