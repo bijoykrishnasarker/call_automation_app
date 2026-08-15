@@ -1155,7 +1155,7 @@ export const AICenter: React.FC = () => {
                                                 ? 'Connected (AI can check & book appointments)'
                                                 : !formData.bookAppointments
                                                   ? 'Off — turn on Book appointments above'
-                                                  : 'NOT connected — Sync with Vapi after setting APP_BASE_URL on Vercel'}
+                                                  : 'NOT connected — open the live site, turn on Book appointments, then Sync with Vapi'}
                                         </span>
                                     </p>
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">

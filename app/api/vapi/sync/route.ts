@@ -5,7 +5,7 @@ import { vapi } from '@/lib/vapi/client';
 import type { AiReceptionistSettingsRow } from '@/lib/ai-receptionist/types';
 import { AI_RECEPTIONIST_SELECT_COLUMNS } from '@/lib/ai-receptionist/types';
 import { normalizeServicesInput } from '@/lib/ai-receptionist/validate-settings';
-import { getAppBaseUrl } from '@/lib/vapi/app-base-url';
+import { resolveAppBaseUrl } from '@/lib/vapi/app-base-url';
 import { buildBookingWebhookTools, buildVapiWebhookServer } from '@/lib/vapi/booking-webhook-tools';
 
 const GENERIC_ERROR_MESSAGE = 'An unexpected error occurred. Please try again.';
@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
       .eq('is_primary', true)
       .maybeSingle();
 
-    const appBaseUrl = getAppBaseUrl();
+    const appBaseUrl = resolveAppBaseUrl(request);
     const tools = appBaseUrl
       ? buildBookingWebhookTools(appBaseUrl, {
           bookAppointments: Boolean(body.bookAppointments),
@@ -456,7 +456,7 @@ export async function POST(request: NextRequest) {
       message: tools.length > 0 && body.bookAppointments
         ? 'Configuration saved and synced with Vapi. Calendar booking tools are connected.'
         : body.bookAppointments
-          ? 'Settings saved, but calendar tools were NOT attached. Set APP_BASE_URL on Vercel and Sync again.'
+          ? 'Settings saved, but calendar tools were NOT attached. Sync again from your public site (not localhost).'
           : 'Configuration saved and synced with Vapi.',
       settings: settingsRow,
       webhookUrl: webhookServer?.url ?? null,
