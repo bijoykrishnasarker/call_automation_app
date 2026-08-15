@@ -82,6 +82,51 @@ const WEB_VOICE_MAP: Record<string, string> = {
     emma: 'Emma',
 };
 
+function stringifyVapiError(err: unknown): string {
+    if (!err) return '';
+    if (typeof err === 'string') return err;
+    if (err instanceof Error && err.message) return err.message;
+    if (typeof err === 'object') {
+        const record = err as Record<string, unknown>;
+        const nested = record.error;
+        if (typeof record.errorMsg === 'string' && record.errorMsg.trim()) return record.errorMsg;
+        if (typeof record.message === 'string' && record.message.trim()) return record.message;
+        if (nested && typeof nested === 'object') {
+            const inner = nested as Record<string, unknown>;
+            if (typeof inner.errorMsg === 'string' && inner.errorMsg.trim()) return inner.errorMsg;
+            if (typeof inner.msg === 'string' && inner.msg.trim()) return inner.msg;
+            if (typeof inner.message === 'string' && inner.message.trim()) return inner.message;
+        }
+        try {
+            return JSON.stringify(err);
+        } catch {
+            return String(err);
+        }
+    }
+    return String(err);
+}
+
+/** Daily.co fires this when a web call hangs up — it is not a real failure. */
+function isBenignVapiHangup(err: unknown): boolean {
+    const text = stringifyVapiError(err).toLowerCase();
+    const blob = (() => {
+        try {
+            return JSON.stringify(err).toLowerCase();
+        } catch {
+            return text;
+        }
+    })();
+    const haystack = `${text} ${blob}`;
+    return (
+        haystack.includes('meeting has ended') ||
+        haystack.includes('meeting-ended') ||
+        haystack.includes('meeting ended') ||
+        haystack.includes('call has ended') ||
+        haystack.includes('"ejected"') ||
+        haystack.includes('ejection')
+    );
+}
+
 // 30-minute time options in 12-hour format with leading zeros (e.g. "09:00 AM").
 const TIME_OPTIONS: string[] = (() => {
     const times: string[] = [];
@@ -128,6 +173,7 @@ export const AICenter: React.FC = () => {
     const [isTraining, setIsTraining] = useState(false);
     const [vapiAssistantId, setVapiAssistantId] = useState<string | null>(null);
     const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
+    const endingCallRef = useRef(false);
 
     // Load voice settings on mount
     useEffect(() => {
@@ -208,29 +254,27 @@ export const AICenter: React.FC = () => {
         vapiRef.current = vapi;
 
         const onStart = () => {
+            endingCallRef.current = false;
             setError(null);
             setIsTestingVoice(true);
         };
-        const onEnd = () => setIsTestingVoice(false);
-        const onError = (err: any) => {
-            console.error('Vapi Web SDK Error:', err);
-            let msg = 'Vapi voice connection failed. Please check microphone permissions or try again.';
-            if (err) {
-                if (typeof err === 'string') {
-                    msg = err;
-                } else if (err.message && typeof err.message === 'string') {
-                    msg = err.message;
-                } else if (err.error && typeof err.error === 'string') {
-                    msg = err.error;
-                } else {
-                    try {
-                        msg = JSON.stringify(err);
-                    } catch {
-                        msg = String(err);
-                    }
-                }
+        const onEnd = () => {
+            endingCallRef.current = false;
+            setIsTestingVoice(false);
+        };
+        const onError = (err: unknown) => {
+            if (endingCallRef.current || isBenignVapiHangup(err)) {
+                endingCallRef.current = false;
+                setIsTestingVoice(false);
+                return;
             }
-            setError(`Vapi Error: ${msg}`);
+            console.error('Vapi Web SDK Error:', err);
+            const detail = stringifyVapiError(err);
+            setError(
+                detail
+                    ? `Voice test failed: ${detail}`
+                    : 'Voice test failed. Check microphone permission and try again.'
+            );
             setIsTestingVoice(false);
         };
 
@@ -487,7 +531,7 @@ export const AICenter: React.FC = () => {
         }
     }, []);
 
-    const handleTestVoice = useCallback(() => {
+    const handleTestVoice = useCallback(async () => {
         if (isLoadingInitial || isSaving) return;
         setError(null);
         setSuccessMessage(null);
@@ -505,20 +549,32 @@ export const AICenter: React.FC = () => {
         }
 
         if (isTestingVoice) {
-            vapi.stop();
+            endingCallRef.current = true;
+            try {
+                vapi.stop();
+            } catch {
+                /* already ending */
+            }
+            setIsTestingVoice(false);
             return;
         }
 
         if (!vapiAssistantId) {
-            setError("Please click 'Sync with Vapi' first to create and configure your AI Receptionist with calendar tools before testing.");
+            setError("Please click Save / Sync with Vapi first to create your AI receptionist, then try Test Voice again.");
             return;
         }
 
         try {
-            // Start call using the fully configured Vapi Assistant ID containing the webhook tools & server
-            vapi.start(vapiAssistantId);
+            endingCallRef.current = false;
+            await vapi.start(vapiAssistantId);
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to start voice test');
+            if (endingCallRef.current || isBenignVapiHangup(e)) {
+                endingCallRef.current = false;
+                setIsTestingVoice(false);
+                return;
+            }
+            setError(e instanceof Error ? e.message : stringifyVapiError(e) || 'Failed to start voice test');
+            setIsTestingVoice(false);
         }
     }, [isLoadingInitial, isSaving, isTestingVoice, vapiAssistantId]);
 
