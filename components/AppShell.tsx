@@ -6,7 +6,8 @@ import { useApp } from '@/contexts/AppContext';
 import { PageContainer } from './PageContainer';
 import { Sidebar } from './Sidebar';
 import { ThemeToggle } from './ThemeToggle';
-import { NavigationItem, Notification } from '@/types';
+import type { Notification } from '@/types';
+import { NavigationItem } from '@/types';
 import {
     Bell, Search, CheckCircle, AlertCircle, Info, Menu, X,
     LayoutDashboard, Users, KanbanSquare, CalendarDays, GitBranch, Bot,
@@ -44,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const {
         contacts, notifications, setNotifications,
+        markAllNotificationsRead, requestNotificationPermission,
         setCrmAction, unreadCount,
     } = useApp();
 
@@ -303,8 +305,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                     <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-card)] shadow-xl">
                                         <div className="flex items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)] p-3">
                                             <h2 className="text-sm font-bold text-[var(--app-text)]">Notifications</h2>
-                                            <span className="text-xs text-zinc-500">{unreadCount} unread</span>
+                                            <div className="flex items-center gap-2">
+                                                {unreadCount > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={markAllNotificationsRead}
+                                                        className="text-[11px] font-medium text-violet-400 hover:text-violet-300"
+                                                    >
+                                                        Mark all read
+                                                    </button>
+                                                )}
+                                                <span className="text-xs text-zinc-500">{unreadCount} unread</span>
+                                            </div>
                                         </div>
+                                        {typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
+                                            <div className="border-b border-[var(--app-border)] px-3 py-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void requestNotificationPermission()}
+                                                    className="text-xs font-medium text-violet-400 hover:text-violet-300"
+                                                >
+                                                    Enable desktop alerts
+                                                </button>
+                                            </div>
+                                        )}
                                         <div className="surface-scroll max-h-80 overflow-y-auto">
                                             {notifications.length === 0 ? (
                                                 <div className="p-8 text-center text-sm text-zinc-500">No new notifications.</div>

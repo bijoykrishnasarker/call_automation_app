@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { Contact, Notification, CRMActionRequest, Message, Pipeline, PipelineStage, Deal, Appointment } from '@/types';
-import { MOCK_MESSAGES, INITIAL_NOTIFICATIONS } from '@/data/mockData';
+import { MOCK_MESSAGES } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { fetchContacts, createContact, updateContact as updateContactApi, deleteContact as deleteContactApi } from '@/lib/supabase/contacts';
@@ -29,6 +29,14 @@ import {
     deleteBooking as deleteBookingApi,
     BookingRow,
 } from '@/lib/supabase/bookings';
+import {
+    LiveNotificationInput,
+    loadStoredNotifications,
+    saveStoredNotifications,
+    prependNotification,
+    maybeShowBrowserNotification,
+    requestBrowserNotificationPermission,
+} from '@/lib/notifications/live-notifications';
 
 interface AppContextType {
     contacts: Contact[];
@@ -63,6 +71,9 @@ interface AppContextType {
     deleteBooking: (bookingId: string) => Promise<void>;
     notifications: Notification[];
     setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+    pushNotification: (input: LiveNotificationInput) => void;
+    markAllNotificationsRead: () => void;
+    requestNotificationPermission: () => Promise<NotificationPermission | 'unsupported'>;
     darkMode: boolean;
     toggleDarkMode: () => void;
     crmAction: CRMActionRequest | undefined;
@@ -87,8 +98,106 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [bookingRows, setBookingRows] = useState<BookingRow[]>([]);
     const [bookingsLoading, setBookingsLoading] = useState(true);
     const [bookingsError, setBookingsError] = useState<string | null>(null);
-    const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
     const [crmAction, setCrmAction] = useState<CRMActionRequest | undefined>(undefined);
+    const knownContactIdsRef = useRef<Set<string>>(new Set());
+    const knownBookingIdsRef = useRef<Set<string>>(new Set());
+    const contactsSyncedRef = useRef(false);
+    const bookingsSyncedRef = useRef(false);
+    const skipContactPollNotifyRef = useRef<Set<string>>(new Set());
+    const skipBookingPollNotifyRef = useRef<Set<string>>(new Set());
+
+    const pushNotification = useCallback(
+        (input: LiveNotificationInput) => {
+            setNotifications(prev => {
+                const next = prependNotification(prev, input);
+                if (user?.id) saveStoredNotifications(user.id, next);
+                return next;
+            });
+            maybeShowBrowserNotification(input.title, input.message);
+        },
+        [user?.id]
+    );
+
+    const markAllNotificationsRead = useCallback(() => {
+        setNotifications(prev => {
+            const next = prev.map(n => ({ ...n, read: true }));
+            if (user?.id) saveStoredNotifications(user.id, next);
+            return next;
+        });
+    }, [user?.id]);
+
+    const requestNotificationPermission = useCallback(() => requestBrowserNotificationPermission(), []);
+
+    const notifyNewContactsFromSync = useCallback(
+        (data: Contact[]) => {
+            if (!contactsSyncedRef.current) {
+                knownContactIdsRef.current = new Set(data.map(c => c.id));
+                contactsSyncedRef.current = true;
+                return;
+            }
+            for (const c of data) {
+                if (knownContactIdsRef.current.has(c.id)) continue;
+                knownContactIdsRef.current.add(c.id);
+                if (skipContactPollNotifyRef.current.has(c.id)) {
+                    skipContactPollNotifyRef.current.delete(c.id);
+                    continue;
+                }
+                const name = `${c.firstName} ${c.lastName}`.trim() || c.phone || c.email || 'New contact';
+                pushNotification({
+                    title: 'New Lead',
+                    message: `${name} added to CRM`,
+                    type: 'success',
+                    linkTo: 'crm',
+                    entityId: c.id,
+                });
+            }
+        },
+        [pushNotification]
+    );
+
+    const notifyNewBookingsFromSync = useCallback(
+        (rows: BookingRow[], contactList: Contact[]) => {
+            const getName = (contactId: string) => {
+                const c = contactList.find(x => x.id === contactId);
+                return c ? `${c.firstName} ${c.lastName}`.trim() : '';
+            };
+            if (!bookingsSyncedRef.current) {
+                knownBookingIdsRef.current = new Set(rows.map(r => r.id));
+                bookingsSyncedRef.current = true;
+                return;
+            }
+            for (const row of rows) {
+                if (knownBookingIdsRef.current.has(row.id)) continue;
+                knownBookingIdsRef.current.add(row.id);
+                if (skipBookingPollNotifyRef.current.has(row.id)) {
+                    skipBookingPollNotifyRef.current.delete(row.id);
+                    continue;
+                }
+                const contactName = getName(row.contact_id);
+                pushNotification({
+                    title: 'New Booking',
+                    message: `${row.title}${contactName ? ` · ${contactName}` : ''}`,
+                    type: 'info',
+                    linkTo: 'calendar',
+                    entityId: row.contact_id,
+                });
+            }
+        },
+        [pushNotification]
+    );
+
+    useEffect(() => {
+        if (!user?.id) {
+            setNotifications([]);
+            knownContactIdsRef.current = new Set();
+            knownBookingIdsRef.current = new Set();
+            contactsSyncedRef.current = false;
+            bookingsSyncedRef.current = false;
+            return;
+        }
+        setNotifications(loadStoredNotifications(user.id));
+    }, [user?.id]);
 
     useEffect(() => {
         if (!user?.id) {
@@ -101,7 +210,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setContactsError(null);
         fetchContacts(user.id)
             .then(data => {
-                if (!cancelled) setContacts(data);
+                if (!cancelled) {
+                    notifyNewContactsFromSync(data);
+                    setContacts(data);
+                }
             })
             .catch(err => {
                 if (!cancelled) setContactsError(err?.message ?? 'Could not load contacts. Refresh the page.');
@@ -110,7 +222,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 if (!cancelled) setContactsLoading(false);
             });
         return () => { cancelled = true; };
-    }, [user?.id]);
+    }, [user?.id, notifyNewContactsFromSync]);
+
+    const contactsRef = useRef(contacts);
+    contactsRef.current = contacts;
 
     useEffect(() => {
         if (!user?.id) {
@@ -174,7 +289,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
             fetchBookings(user.id)
                 .then(rows => {
-                    if (!cancelled) setBookingRows(rows);
+                    if (!cancelled) {
+                        notifyNewBookingsFromSync(rows, contactsRef.current);
+                        setBookingRows(rows);
+                    }
                 })
                 .catch(err => {
                     if (!cancelled) setBookingsError(err?.message ?? 'Failed to load bookings');
@@ -187,7 +305,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const loadContacts = () => {
             fetchContacts(user.id)
                 .then(data => {
-                    if (!cancelled) setContacts(data);
+                    if (!cancelled) {
+                        notifyNewContactsFromSync(data);
+                        setContacts(data);
+                    }
                 })
                 .catch(() => {
                     /* keep existing contacts */
@@ -208,7 +329,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             window.removeEventListener('focus', onFocus);
             window.clearInterval(interval);
         };
-    }, [user?.id]);
+    }, [user?.id, notifyNewBookingsFromSync]);
 
     const getContactName = useCallback((contactId: string) => {
         const c = contacts.find(x => x.id === contactId);
@@ -228,13 +349,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setContactsError(null);
         try {
             const data = await fetchContacts(user.id);
+            notifyNewContactsFromSync(data);
             setContacts(data);
         } catch (err) {
             setContactsError(err instanceof Error ? err.message : 'Could not load contacts. Refresh the page.');
         } finally {
             setContactsLoading(false);
         }
-    }, [user?.id]);
+    }, [user?.id, notifyNewContactsFromSync]);
 
     const addContact = useCallback(
         async (contact: Contact): Promise<Contact | null> => {
@@ -243,6 +365,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 const created = await createContact(user.id, contact);
                 setContacts(prev => [created, ...prev.filter(c => c.id !== created.id)]);
                 setContactsError(null);
+                knownContactIdsRef.current.add(created.id);
+                skipContactPollNotifyRef.current.add(created.id);
+                const name = `${created.firstName} ${created.lastName}`.trim() || created.phone || created.email || 'New contact';
+                pushNotification({
+                    title: 'New Lead Saved',
+                    message: `${name} is now in your CRM`,
+                    type: 'success',
+                    linkTo: 'crm',
+                    entityId: created.id,
+                });
                 return created;
             } catch (err) {
                 const message =
@@ -254,7 +386,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 throw new Error(message);
             }
         },
-        [user?.id]
+        [user?.id, pushNotification]
     );
 
     const updateContact = useCallback(
@@ -302,9 +434,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (!user?.id) throw new Error('Sign in to add a deal.');
             const created = await createDealApi(user.id, deal);
             setDeals(prev => [created, ...prev]);
+            pushNotification({
+                title: 'New Deal',
+                message: created.title,
+                type: 'success',
+                linkTo: 'pipelines',
+                entityId: created.contactId,
+            });
             return created;
         },
-        [user?.id]
+        [user?.id, pushNotification]
     );
 
     const updateDeal = useCallback(
@@ -461,6 +600,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 const row = await createBookingApi(user.id, payload);
                 setBookingRows(prev => [...prev, row].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()));
                 const name = getContactName(payload.contactId);
+                knownBookingIdsRef.current.add(row.id);
+                skipBookingPollNotifyRef.current.add(row.id);
+                pushNotification({
+                    title: 'Booking Created',
+                    message: `${payload.title}${name ? ` · ${name}` : ''}`,
+                    type: 'info',
+                    linkTo: 'calendar',
+                    entityId: payload.contactId,
+                });
                 return {
                     id: row.id,
                     title: row.title,
@@ -475,7 +623,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 throw err instanceof Error ? err : new Error('Failed to add booking');
             }
         },
-        [user?.id, getContactName]
+        [user?.id, getContactName, pushNotification]
     );
 
     const updateBooking = useCallback(
@@ -559,6 +707,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 deleteBooking,
                 notifications,
                 setNotifications,
+                pushNotification,
+                markAllNotificationsRead,
+                requestNotificationPermission,
                 darkMode,
                 toggleDarkMode,
                 crmAction,
