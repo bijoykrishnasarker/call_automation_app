@@ -284,15 +284,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const addDeal = useCallback(
         async (deal: Omit<Deal, 'id'>): Promise<Deal | null> => {
-            if (!user?.id) return null;
-            try {
-                const created = await createDealApi(user.id, deal);
-                setDeals(prev => [created, ...prev]);
-                return created;
-            } catch (err) {
-                setPipelinesError(err instanceof Error ? err.message : 'Failed to add deal');
-                return null;
-            }
+            if (!user?.id) throw new Error('Sign in to add a deal.');
+            const created = await createDealApi(user.id, deal);
+            setDeals(prev => [created, ...prev]);
+            return created;
         },
         [user?.id]
     );

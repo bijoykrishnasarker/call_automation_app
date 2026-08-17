@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Appointment, Contact } from '@/types';
+import { Appointment } from '@/types';
 import {
     calendarCellDateKey,
     dateTimeFromWallClock,
@@ -15,12 +15,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2, Loader2 } from 'lucide-react';
 
-function formatContactOption(contact: Contact): string {
-    const name = `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim();
-    const detail = (contact.email || contact.phone || '').trim();
-    if (name && detail) return `${name} (${detail})`;
-    return name || detail || 'Unnamed contact';
-}
+import { formatContactOption } from '@/lib/contacts/format-contact-option';
 
 function emptyNewBooking(date = getZonedDateKey(new Date())) {
     return {

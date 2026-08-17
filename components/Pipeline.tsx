@@ -4,7 +4,8 @@ import React, { useState, useRef, MouseEvent, useEffect } from 'react';
 import { Deal, Pipeline as PipelineType } from '@/types';
 import { useApp } from '@/contexts/AppContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { MoreHorizontal, GripVertical, Plus, Settings, Trash2, Check, Layout, ChevronDown, Zap, DollarSign, X, Briefcase, Headphones, Users, PenTool } from 'lucide-react';
+import { MoreHorizontal, GripVertical, Plus, Settings, Trash2, Check, Layout, ChevronDown, Zap, DollarSign, X, Briefcase, Headphones, Users, PenTool, Loader2 } from 'lucide-react';
+import { formatContactOption } from '@/lib/contacts/format-contact-option';
 
 // Simple particle for confetti
 interface Particle {
@@ -121,6 +122,8 @@ export const Pipeline: React.FC = () => {
         contactId: '',
         stageId: ''
     });
+    const [dealFormError, setDealFormError] = useState<string | null>(null);
+    const [isSavingDeal, setIsSavingDeal] = useState(false);
 
     // Create Pipeline Modal State
     const [isCreatePipelineModalOpen, setIsCreatePipelineModalOpen] = useState(false);
@@ -189,18 +192,43 @@ export const Pipeline: React.FC = () => {
 
     const handleAddDeal = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newDeal.title || !newDeal.contactId || !newDeal.stageId) return;
-        const value = parseFloat(newDeal.value) || 0;
-        const created = await addDeal({
-            contactId: newDeal.contactId,
-            title: newDeal.title,
-            value,
-            stageId: newDeal.stageId,
-        });
-        if (created) {
+        if (isSavingDeal) return;
+        setDealFormError(null);
+
+        const title = newDeal.title.trim();
+        if (!title) {
+            setDealFormError('Enter a deal title.');
+            return;
+        }
+        if (!newDeal.contactId) {
+            setDealFormError('Select a contact from your CRM.');
+            return;
+        }
+        if (!newDeal.stageId) {
+            setDealFormError('Select a pipeline stage.');
+            return;
+        }
+
+        const value = Number.parseFloat(newDeal.value) || 0;
+        setIsSavingDeal(true);
+        try {
+            const created = await addDeal({
+                contactId: newDeal.contactId,
+                title,
+                value,
+                stageId: newDeal.stageId,
+            });
+            if (!created) {
+                setDealFormError('Could not add this deal. Try again.');
+                return;
+            }
             setIsAddDealModalOpen(false);
             setNewDeal({ title: '', value: '', contactId: '', stageId: '' });
             showToast(`Deal "${created.title}" added to pipeline.`);
+        } catch (err) {
+            setDealFormError(err instanceof Error ? err.message : 'Could not add this deal.');
+        } finally {
+            setIsSavingDeal(false);
         }
     };
 
@@ -361,6 +389,13 @@ export const Pipeline: React.FC = () => {
             handleOpenCreatePipeline();
             return;
         }
+        setDealFormError(null);
+        setNewDeal({
+            title: '',
+            value: '',
+            contactId: contacts[0]?.id ?? '',
+            stageId: activeStages[0]?.id ?? '',
+        });
         setIsAddDealModalOpen(true);
     };
 
@@ -615,7 +650,7 @@ export const Pipeline: React.FC = () => {
                         {isEditMode ? 'Done Editing' : 'Edit Stages'}
                     </button>
                     <button
-                        onClick={() => setIsAddDealModalOpen(true)}
+                        onClick={openNewDeal}
                         className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-violet-400 active:scale-95"
                     >
                         <Plus className="h-4 w-4" /> New Deal
@@ -1047,7 +1082,7 @@ export const Pipeline: React.FC = () => {
                                     <option value="">Select a contact...</option>
                                     {contacts.map(contact => (
                                         <option key={contact.id} value={contact.id}>
-                                            {contact.firstName} {contact.lastName} ({contact.email})
+                                            {formatContactOption(contact)}
                                         </option>
                                     ))}
                                 </select>
@@ -1070,19 +1105,29 @@ export const Pipeline: React.FC = () => {
                                 </select>
                             </div>
 
+                            {contacts.length === 0 && (
+                                <p className="text-sm text-amber-500">Add a contact in CRM before creating a deal.</p>
+                            )}
+                            {dealFormError && (
+                                <p className="text-sm font-medium text-red-500">{dealFormError}</p>
+                            )}
+
                             <div className="pt-4 flex gap-3">
                                 <button
                                     type="button"
-                                    onClick={() => setIsAddDealModalOpen(false)}
-                                    className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors active:scale-95"
+                                    onClick={() => !isSavingDeal && setIsAddDealModalOpen(false)}
+                                    disabled={isSavingDeal}
+                                    className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95"
+                                    disabled={isSavingDeal || contacts.length === 0 || activeStages.length === 0}
+                                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95 disabled:opacity-50"
                                 >
-                                    Add Deal
+                                    {isSavingDeal ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                    {isSavingDeal ? 'Adding…' : 'Add Deal'}
                                 </button>
                             </div>
                         </form>

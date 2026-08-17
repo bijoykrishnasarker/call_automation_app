@@ -35,24 +35,47 @@ export async function fetchDeals(userId: string): Promise<Deal[]> {
 }
 
 export async function createDeal(
-  userId: string,
+  _userId: string,
   deal: { contactId: string; stageId: string; title: string; value: number; source?: string }
 ): Promise<Deal> {
-  const { data, error } = await supabase
-    .from('deals')
-    .insert({
-      user_id: userId,
-      contact_id: deal.contactId,
-      stage_id: deal.stageId,
-      title: deal.title,
-      value: deal.value,
-      source: deal.source ?? 'Direct Lead',
-    })
-    .select('*')
-    .single();
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Sign in to add a deal.');
 
-  if (error) throw error;
-  return rowToDeal(data as DealRow);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch('/api/deals', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        contactId: deal.contactId,
+        stageId: deal.stageId,
+        title: deal.title,
+        value: deal.value,
+        source: deal.source ?? 'Direct Lead',
+      }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({})) as { deal?: DealRow; message?: string };
+    if (!res.ok || !data.deal) {
+      throw new Error(data.message || 'Failed to add deal');
+    }
+    return rowToDeal(data.deal);
+  } catch (err) {
+    if (
+      (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError')
+    ) {
+      throw new Error('Adding the deal took too long. Please try again.');
+    }
+    throw err instanceof Error ? err : new Error('Failed to add deal');
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function updateDeal(
