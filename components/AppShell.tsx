@@ -3,12 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useApp } from '@/contexts/AppContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { PageContainer } from './PageContainer';
 import { Sidebar } from './Sidebar';
 import { NavigationItem, Notification } from '@/types';
 import {
-    Bell, Search, Moon, Sun, CheckCircle, AlertCircle, Info, Menu, X,
+    Bell, Search, Sun, CheckCircle, AlertCircle, Info, Menu, X,
     LayoutDashboard, Users, KanbanSquare, CalendarDays, GitBranch, Bot,
     Star, Inbox, Megaphone, Settings as SettingsIcon,
 } from 'lucide-react';
@@ -42,14 +41,10 @@ const PAGE_TITLES: Record<string, string> = {
 export function AppShell({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
-    const { user: authUser } = useAuth();
     const {
         contacts, notifications, setNotifications,
-        darkMode, toggleDarkMode, setCrmAction, unreadCount,
+        setCrmAction, unreadCount,
     } = useApp();
-
-    const displayName = authUser?.fullName?.trim() || authUser?.email?.split('@')[0] || 'User';
-    const displayEmail = authUser?.email || '';
 
     const [showNotifications, setShowNotifications] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -63,12 +58,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const mobileSearchRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (darkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    }, [darkMode]);
+        document.documentElement.classList.add('dark');
+    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -184,7 +175,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     const renderSearch = (mobile = false) => (
         <div className="relative w-full" ref={mobile ? mobileSearchRef : desktopSearchRef}>
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
             <input
                 type="text"
                 value={searchQuery}
@@ -194,32 +185,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         handleSearchResultClick(searchResults[0]);
                     }
                 }}
-                placeholder="Search commands, contacts, and actions"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 outline-none focus:border-lime-500 focus:ring-2 focus:ring-lime-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                placeholder="Search contacts, actions, pipelines..."
+                className="h-10 w-full rounded-full border border-zinc-800 bg-[#121214] pl-10 pr-4 text-sm text-zinc-200 outline-none placeholder:text-zinc-500 focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20"
             />
             {showSearchDropdown && searchResults.length > 0 && (
-                <div className={`absolute ${mobile ? 'left-0 right-0' : 'left-0 right-0'} top-full z-50 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900`}>
+                <div className={`absolute ${mobile ? 'left-0 right-0' : 'left-0 right-0'} top-full z-50 mt-2 overflow-hidden rounded-xl border border-white/[0.08] bg-[#141416] shadow-xl shadow-black/40`}>
                     {searchResults.map((result, idx) => (
                         <button
                             key={`${result.type}-${idx}`}
                             type="button"
                             onClick={() => handleSearchResultClick(result)}
-                            className="group flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                            className="group flex w-full items-center gap-3 border-b border-white/[0.06] px-4 py-3 text-left transition-colors last:border-0 hover:bg-white/[0.04]"
                         >
                             {result.type === 'nav' ? (
-                                <div className="rounded-lg bg-slate-100 p-2 text-slate-500 transition-colors group-hover:bg-lime-50 group-hover:text-lime-600 dark:bg-slate-800 dark:text-slate-400 dark:group-hover:bg-lime-900/20">
+                                <div className="rounded-lg bg-zinc-800 p-2 text-zinc-400 transition-colors group-hover:bg-violet-500/10 group-hover:text-violet-400">
                                     <result.icon className="h-4 w-4" />
                                 </div>
                             ) : (
-                                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-lime-200 bg-lime-100 text-xs font-bold text-lime-700 dark:border-lime-800 dark:bg-lime-900/30 dark:text-lime-400">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-violet-200 bg-violet-100 text-xs font-bold text-violet-700 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
                                     {result.firstName[0]}
                                 </div>
                             )}
                             <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                                <p className="truncate text-sm font-bold text-white">
                                     {result.type === 'nav' ? result.label : `${result.firstName} ${result.lastName}`}
                                 </p>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                <p className="text-[10px] uppercase tracking-wider text-zinc-500">
                                     {result.type === 'nav' ? 'Navigate' : 'Contact'}
                                 </p>
                             </div>
@@ -231,11 +222,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
 
     return (
-        <div className={`min-h-dvh font-sans transition-colors duration-300 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] ${darkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+        <div className={`enterprise-surface min-h-dvh font-sans text-zinc-100 transition-colors duration-300 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]`}>
             <a href="#main-content" className="skip-link">Skip to main content</a>
 
-            <div className="hidden lg:block lg:sticky lg:top-0 lg:h-dvh lg:border-r lg:border-slate-200 lg:dark:border-slate-800">
-                <Sidebar className="shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]" />
+            <div className="hidden lg:block lg:sticky lg:top-0 lg:h-dvh lg:border-r lg:border-white/[0.06] lg:bg-[#0B0C0E]">
+                <Sidebar />
             </div>
 
             {mobileNavOpen && (
@@ -250,13 +241,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="mobile-nav-title"
-                        className="relative h-dvh w-[min(20rem,85vw)] overflow-hidden border-r border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+                        className="relative h-dvh w-[min(20rem,85vw)] overflow-hidden border-r border-white/[0.06] bg-[#0B0C0E] shadow-2xl"
                     >
-                        <div className="flex items-center justify-end border-b border-slate-200 p-3 dark:border-slate-800">
+                        <div className="flex items-center justify-end border-b border-white/[0.06] p-3">
                             <button
                                 type="button"
                                 onClick={() => setMobileNavOpen(false)}
-                                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                className="rounded-lg p-2 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
                                 aria-label="Close navigation"
                             >
                                 <X className="h-5 w-5" />
@@ -267,43 +258,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
             )}
 
-            <div className="flex min-h-dvh min-w-0 flex-col bg-slate-50 transition-colors dark:bg-slate-950">
-                <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
-                    <PageContainer className="flex min-h-16 items-center gap-3 py-3">
-                        <button
-                            type="button"
-                            onClick={() => setMobileNavOpen(true)}
-                            className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden"
-                            aria-label="Open navigation"
-                        >
-                            <Menu className="h-5 w-5" />
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-3">
-                                <h1 className="page-title min-w-0 truncate font-bold text-slate-800 dark:text-slate-100">{pageTitle}</h1>
-                                <div className="hidden min-w-0 flex-1 md:block">{renderSearch()}</div>
-                            </div>
+            <div className="enterprise-surface flex min-h-dvh min-w-0 flex-col bg-[#0B0C0E]">
+                <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#0B0C0E]">
+                    <div className="grid min-h-[64px] grid-cols-[1fr_minmax(0,36rem)_1fr] items-center gap-3 px-4 sm:px-6 lg:px-8">
+                        <div className="flex min-w-0 items-center gap-3 justify-self-start">
+                            <button
+                                type="button"
+                                onClick={() => setMobileNavOpen(true)}
+                                className="rounded-lg border border-zinc-800 p-2 text-zinc-400 hover:bg-white/[0.04] lg:hidden"
+                                aria-label="Open navigation"
+                            >
+                                <Menu className="h-5 w-5" />
+                            </button>
+                            <h1 className="truncate text-[22px] font-bold tracking-tight text-white">{pageTitle}</h1>
                         </div>
 
-                        <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="hidden w-full md:block">
+                            {renderSearch()}
+                        </div>
+
+                        <div className="flex items-center gap-2 justify-self-end">
                             <button
                                 type="button"
                                 onClick={() => setMobileSearchOpen((value) => !value)}
-                                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 md:hidden"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-[#121214] text-zinc-400 hover:text-zinc-200 md:hidden"
                                 aria-expanded={mobileSearchOpen}
                                 aria-controls="mobile-search-panel"
                                 aria-label="Toggle search"
                             >
-                                <Search className="h-5 w-5" />
+                                <Search className="h-4 w-4" />
                             </button>
                             <button
                                 type="button"
-                                onClick={toggleDarkMode}
-                                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-[#121214] text-zinc-400 hover:text-zinc-200"
+                                aria-label="Theme"
                             >
-                                {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                                <Sun className="h-4 w-4" />
                             </button>
                             <div className="relative" ref={notificationRef}>
                                 <button
@@ -311,39 +301,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                     onClick={() => setShowNotifications((value) => !value)}
                                     aria-expanded={showNotifications}
                                     aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
-                                    className={`relative rounded-full p-2 transition-colors ${showNotifications ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}
+                                    className={`relative flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-[#121214] transition-colors ${showNotifications ? 'text-zinc-200' : 'text-zinc-400 hover:text-zinc-200'}`}
                                 >
                                     <Bell className="h-5 w-5" />
                                     {unreadCount > 0 && (
-                                        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-white bg-red-500 dark:border-slate-900" />
+                                        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
                                     )}
                                 </button>
                                 {showNotifications && (
-                                    <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
-                                        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950">
-                                            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Notifications</h2>
-                                            <span className="text-xs text-slate-500 dark:text-slate-400">{unreadCount} unread</span>
+                                    <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/[0.08] bg-[#141416] shadow-xl shadow-black/50">
+                                        <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#111214] p-3">
+                                            <h2 className="text-sm font-bold text-white">Notifications</h2>
+                                            <span className="text-xs text-zinc-500">{unreadCount} unread</span>
                                         </div>
                                         <div className="surface-scroll max-h-80 overflow-y-auto">
                                             {notifications.length === 0 ? (
-                                                <div className="p-8 text-center text-sm text-slate-500">No new notifications.</div>
+                                                <div className="p-8 text-center text-sm text-zinc-500">No new notifications.</div>
                                             ) : (
                                                 notifications.map((n) => (
                                                     <button
                                                         key={n.id}
                                                         type="button"
                                                         onClick={() => handleNotificationClick(n)}
-                                                        className={`flex w-full items-start gap-3 border-b border-slate-100 p-3 text-left transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800 ${!n.read ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}
+                                                        className={`flex w-full items-start gap-3 border-b border-white/[0.06] p-3 text-left last:border-0 hover:bg-white/[0.03] ${!n.read ? 'bg-violet-500/5' : ''}`}
                                                     >
-                                                        <div className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${n.type === 'alert' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : n.type === 'success' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                                                        <div className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${n.type === 'alert' ? 'bg-red-500/15 text-red-400' : n.type === 'success' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-blue-500/15 text-blue-400'}`}>
                                                             {n.type === 'alert' ? <AlertCircle className="h-4 w-4" /> : n.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
                                                         </div>
                                                         <div className="min-w-0 flex-1">
-                                                            <p className={`text-sm ${!n.read ? 'font-bold text-slate-800 dark:text-slate-100' : 'font-medium text-slate-600 dark:text-slate-300'}`}>{n.title}</p>
-                                                            <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{n.message}</p>
-                                                            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">{n.time}</p>
+                                                            <p className={`text-sm ${!n.read ? 'font-bold text-white' : 'font-medium text-zinc-300'}`}>{n.title}</p>
+                                                            <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{n.message}</p>
+                                                            <p className="mt-1 text-[10px] text-zinc-600">{n.time}</p>
                                                         </div>
-                                                        {!n.read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                                                        {!n.read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-violet-500" />}
                                                     </button>
                                                 ))
                                             )}
@@ -351,18 +341,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                     </div>
                                 )}
                             </div>
-                            <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-                            <div className="flex items-center gap-2 rounded-lg p-1.5" title={displayEmail}>
-                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-lime-100 text-sm font-semibold text-lime-700 dark:bg-lime-900/30 dark:text-lime-300">
-                                    {displayName.charAt(0).toUpperCase()}
-                                </div>
-                                <div className="hidden text-left md:block">
-                                    <p className="max-w-[140px] truncate text-sm font-medium text-slate-700 dark:text-slate-200">{displayName}</p>
-                                    <p className="max-w-[140px] truncate text-[10px] text-slate-500 dark:text-slate-400">{displayEmail || 'Pro Plan'}</p>
-                                </div>
-                            </div>
                         </div>
-                    </PageContainer>
+                    </div>
 
                     {mobileSearchOpen && (
                         <PageContainer className="pb-3 md:hidden" id="mobile-search-panel">
@@ -371,8 +351,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     )}
                 </header>
 
-                <main id="main-content" className="min-w-0 flex-1 py-4 sm:py-6">
-                    <PageContainer className="h-full min-w-0">{children}</PageContainer>
+                <main id="main-content" className={`min-w-0 flex-1 ${pathname === '/pipelines' || pathname === '/calendar' || pathname === '/workflows' ? 'flex flex-col' : 'py-4 sm:py-6'}`}>
+                    {pathname === '/pipelines' || pathname === '/calendar' || pathname === '/workflows' ? (
+                        <div className={`flex min-h-0 flex-1 flex-col px-4 sm:px-6 lg:px-8 ${pathname === '/calendar' || pathname === '/workflows' ? 'py-4' : ''}`}>{children}</div>
+                    ) : (
+                        <PageContainer className="h-full min-w-0">{children}</PageContainer>
+                    )}
                 </main>
             </div>
         </div>

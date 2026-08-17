@@ -7,6 +7,15 @@
   --type-display: clamp(1.875rem, 1.5rem + 1.8vw, 3rem);
   --type-h1: clamp(1.5rem, 1.25rem + 1.2vw, 2.25rem);
   --type-h2: clamp(1.25rem, 1.1rem + 0.8vw, 1.75rem);
+  --brand: #8b5cf6;
+  --brand-light: #a78bfa;
+  --brand-muted: rgba(139, 92, 246, 0.12);
+  --app-bg: #0b0c0e;
+  --app-surface: #111214;
+  --app-card: #141416;
+  --app-border: rgba(255, 255, 255, 0.06);
+  --app-text: #f4f4f5;
+  --app-muted: #a1a1aa;
 }
 
 @media (min-width: 640px) {
@@ -26,6 +35,10 @@ body {
   min-height: 100%;
 }
 
+html {
+  color-scheme: dark;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -36,21 +49,34 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #3f3f46;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #52525b;
 }
 
 body {
-  background-color: #f8fafc;
+  background-color: var(--app-bg);
+  color: var(--app-text);
   min-height: 100dvh;
 }
 
-.dark body {
-  background-color: #020617;
+.enterprise-surface {
+  background-color: var(--app-bg);
+}
+
+.app-card {
+  border-radius: 1rem;
+  border: 1px solid var(--app-border);
+  background-color: var(--app-card);
+}
+
+.app-panel {
+  border-radius: 1rem;
+  border: 1px solid var(--app-border);
+  background-color: var(--app-surface);
 }
 
 #__next,
@@ -71,7 +97,7 @@ iframe {
 }
 
 :focus-visible {
-  outline: 2px solid #84cc16;
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -82,7 +108,7 @@ iframe {
   z-index: 100;
   transform: translateY(-200%);
   border-radius: 0.75rem;
-  background: #0f172a;
+  background: #18181b;
   color: #fff;
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
@@ -102,14 +128,6 @@ iframe {
 
 .surface-scroll {
   scrollbar-gutter: stable;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: #475569;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
 }
 
 button,

@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact, ContactStatus, Note, Task, CRMActionRequest } from '@/types';
-import { Search, Filter, Plus, Phone, Mail, MessageSquare, Bot, X, Sparkles, MoreHorizontal, FileText, Smartphone, PenTool, LayoutTemplate, User, MapPin, Building, Globe, Tag, CheckSquare, Square, Calendar, ArrowRight, Save, Upload, Trash2 } from 'lucide-react';
+import { Search, Plus, Phone, Mail, MessageSquare, Bot, X, Sparkles, MoreHorizontal, FileText, Smartphone, PenTool, LayoutTemplate, User, MapPin, Building, Globe, Tag, CheckSquare, Square, Calendar, ArrowRight, Save, Upload, Trash2, UserPlus, BadgeCheck, Flame, UserSearch, FileX } from 'lucide-react';
 import { generateContactSummary, suggestEmailDraft } from '@/services/geminiService';
+import { StatCard } from '@/components/ui/StatCard';
+import { FilterTabs } from '@/components/ui/FilterTabs';
 
 interface CRMProps {
   contacts: Contact[];
@@ -18,6 +20,7 @@ interface CRMProps {
 export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsError, onAddContact, onUpdateContact, onDeleteContact, actionRequest }) => {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeDetailTab, setActiveDetailTab] = useState<'activity' | 'info' | 'tasks'>('activity');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -68,13 +71,25 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
 
   const filteredContacts = contacts.filter(c => {
     const q = searchQuery.toLowerCase();
-    return (
+    const matchesSearch =
       c.firstName.toLowerCase().includes(q) ||
       c.lastName.toLowerCase().includes(q) ||
       c.email.toLowerCase().includes(q) ||
-      (c.company?.toLowerCase().includes(q) ?? false)
-    );
+      (c.company?.toLowerCase().includes(q) ?? false);
+    if (!matchesSearch) return false;
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'closed') return c.status === ContactStatus.Won || c.status === ContactStatus.Lost;
+    return c.status === statusFilter;
   });
+
+  const statusTabs = [
+    { id: 'all', label: 'All', count: contacts.length },
+    { id: ContactStatus.NewLead, label: 'New Lead', count: contacts.filter(c => c.status === ContactStatus.NewLead).length },
+    { id: ContactStatus.Contacted, label: 'Contacted', count: contacts.filter(c => c.status === ContactStatus.Contacted).length },
+    { id: ContactStatus.Booked, label: 'Booked', count: contacts.filter(c => c.status === ContactStatus.Booked).length },
+    { id: 'closed', label: 'Closed/Won', count: contacts.filter(c => c.status === ContactStatus.Won || c.status === ContactStatus.Lost).length },
+    { id: ContactStatus.Lost, label: 'Lost', count: contacts.filter(c => c.status === ContactStatus.Lost).length },
+  ];
 
   const requestDeleteContact = (contact: Contact, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -315,7 +330,42 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
   };
 
   return (
-    <div className="relative flex min-h-[70dvh] overflow-hidden lg:h-[calc(100dvh-10rem)]">
+    <div className="relative space-y-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Total Leads"
+          value={contacts.length}
+          icon={UserSearch}
+          iconClassName="bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20"
+          trend="Live Sync"
+          trendLabel="active CRM pipeline"
+        />
+        <StatCard
+          title="New Leads"
+          value={contacts.filter(c => c.status === ContactStatus.NewLead).length}
+          icon={UserPlus}
+          iconClassName="bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20"
+          trend="+12%"
+          trendLabel="vs last week"
+        />
+        <StatCard
+          title="Qualified / Booked"
+          value={contacts.filter(c => c.status === ContactStatus.Booked || c.status === ContactStatus.Contacted).length}
+          icon={BadgeCheck}
+          iconClassName="bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20"
+          trend="+4%"
+          trendLabel="conversion"
+        />
+        <StatCard
+          title="Hot / Won Leads"
+          value={contacts.filter(c => c.status === ContactStatus.Won).length}
+          icon={Flame}
+          iconClassName="bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20"
+          trend="High Intent"
+        />
+      </div>
+
+    <div className="relative flex min-h-[70dvh] overflow-hidden lg:h-[calc(100dvh-14rem)]">
       {/* Hidden File Input */}
       <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
 
@@ -326,45 +376,46 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
       )}
 
       {contactsLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-          <div className="w-8 h-8 border-2 border-lime-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-500 dark:text-slate-400 text-sm">Loading contacts...</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 app-card">
+          <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-zinc-500 text-sm">Loading contacts...</p>
         </div>
       ) : (
       <>
       {/* List View */}
-      <div className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all dark:border-slate-800 dark:bg-slate-900 ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full flex-1 max-w-sm">
+      <div className={`flex min-w-0 flex-1 flex-col overflow-hidden app-card shadow-sm transition-all ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
+        <div className="flex flex-col gap-3 border-b border-white/[0.06] bg-[#111214] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search contacts..."
+              placeholder="Search leads by name, email, or company..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500 placeholder-slate-400 dark:placeholder-slate-500 transition-shadow"
+              className="w-full pl-9 pr-4 py-2.5 bg-[#0B0C0E] border border-white/[0.08] rounded-xl text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 placeholder:text-zinc-500 transition-shadow"
             />
           </div>
           <div className="flex flex-wrap gap-2 sm:ml-4 sm:justify-end">
             <button
               onClick={handleImportClick}
-              className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors active:scale-95"
+              className="flex items-center gap-2 px-3 py-2.5 bg-[#141416] border border-white/[0.08] text-zinc-400 hover:bg-white/[0.04] rounded-xl text-sm font-semibold transition-colors active:scale-95"
               title="Import CSV"
             >
               <Upload className="w-4 h-4" />
-              <span className="hidden sm:inline">Import</span>
-            </button>
-            <button className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 active:scale-95 transition-transform">
-              <Filter className="w-4 h-4" />
+              <span className="hidden sm:inline">Import CSV</span>
             </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-lime-600 text-white rounded-lg text-sm font-medium hover:bg-lime-700 transition-all active:scale-95 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2.5 bg-violet-500 text-white rounded-xl text-sm font-semibold hover:bg-violet-400 transition-all active:scale-95"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Contact</span>
+              <span className="hidden sm:inline">New Lead</span>
             </button>
           </div>
+        </div>
+
+        <div className="border-b border-white/[0.06] px-4 py-3">
+          <FilterTabs tabs={statusTabs} activeId={statusFilter} onChange={setStatusFilter} />
         </div>
 
         <div className="surface-scroll flex-1 overflow-y-auto">
@@ -372,24 +423,18 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
             {filteredContacts.length === 0 ? (
               <div className="px-6 py-16 text-center">
                 <div className="mx-auto flex max-w-sm flex-col items-center justify-center gap-2">
-                  {contacts.length === 0 ? (
-                    <>
-                      <p className="font-medium text-slate-600 dark:text-slate-300">No contacts yet</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Add your first contact to get started, or import from CSV.</p>
-                      <button
-                        type="button"
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="mt-2 inline-flex items-center gap-2 rounded-lg bg-lime-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-lime-700 active:scale-95"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Contact
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-medium text-slate-600 dark:text-slate-300">No contacts match your search</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Try a different search term or clear the search.</p>
-                    </>
+                  <FileX className="h-10 w-10 text-zinc-600" />
+                  <p className="font-medium text-zinc-200">No leads found</p>
+                  <p className="text-sm text-zinc-500">Try adjusting your search query or add a new lead.</p>
+                  {contacts.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddModalOpen(true)}
+                      className="mt-2 inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400"
+                    >
+                      <Plus className="h-4 w-4" />
+                      New Lead
+                    </button>
                   )}
                 </div>
               </div>
@@ -399,14 +444,14 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                   <button
                     type="button"
                     onClick={() => handleContactClick(contact)}
-                    className={`w-full rounded-xl border p-4 text-left transition-colors ${selectedContact?.id === contact.id ? 'border-lime-300 bg-lime-50 dark:border-lime-800 dark:bg-lime-900/20' : 'border-slate-200 bg-white hover:border-lime-200 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-lime-800 dark:hover:bg-slate-800/80'}`}
+                    className={`w-full rounded-xl border p-4 text-left transition-colors ${selectedContact?.id === contact.id ? 'border-violet-500/30 bg-violet-500/10' : 'border-white/[0.06] bg-[#141416] hover:border-violet-500/20 hover:bg-white/[0.03]'}`}
                   >
                     <div className="flex items-start justify-between gap-3 pr-8">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{contact.firstName} {contact.lastName}</p>
-                        <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">{contact.email}</p>
-                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{contact.phone}</p>
-                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{contact.company || 'Individual'} · {contact.lastActivity}</p>
+                        <p className="truncate font-semibold text-white">{contact.firstName} {contact.lastName}</p>
+                        <p className="mt-1 truncate text-sm text-zinc-500">{contact.email}</p>
+                        <p className="mt-1 text-sm text-zinc-500">{contact.phone}</p>
+                        <p className="mt-2 text-xs text-zinc-500">{contact.company || 'Individual'} · {contact.lastActivity}</p>
                       </div>
                       <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${contact.status === ContactStatus.NewLead ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : contact.status === ContactStatus.Won ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : contact.status === ContactStatus.Lost ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
                         {contact.status}
@@ -430,40 +475,33 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
           </div>
 
           <table className="hidden w-full text-left text-sm md:table">
-            <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+            <thead className="bg-[#111214] text-zinc-500 text-xs font-semibold uppercase tracking-wide border-b border-white/[0.06] sticky top-0 z-10">
               <tr>
-                <th className="px-6 py-3">Name</th>
-                <th className="px-6 py-3 hidden sm:table-cell">Email</th>
-                <th className="px-6 py-3 hidden md:table-cell">Phone</th>
+                <th className="px-6 py-3">Lead Name</th>
                 <th className="px-6 py-3 hidden lg:table-cell">Company</th>
+                <th className="px-6 py-3 hidden sm:table-cell">Email & Phone</th>
                 <th className="px-6 py-3 hidden xl:table-cell">Status</th>
-                <th className="px-6 py-3 hidden 2xl:table-cell">Last Active</th>
-                <th className="px-6 py-3 w-14 text-right"> </th>
+                <th className="px-6 py-3 hidden 2xl:table-cell">Source</th>
+                <th className="px-6 py-3 w-14 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-white/[0.06]">
               {filteredContacts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center">
+                  <td colSpan={6} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
-                      {contacts.length === 0 ? (
-                        <>
-                          <p className="text-slate-600 dark:text-slate-300 font-medium">No contacts yet</p>
-                          <p className="text-slate-500 dark:text-slate-400 text-sm">Add your first contact to get started, or import from CSV.</p>
-                          <button
-                            type="button"
-                            onClick={() => setIsAddModalOpen(true)}
-                            className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-lime-600 text-white rounded-lg text-sm font-medium hover:bg-lime-700 transition-colors active:scale-95"
-                          >
-                            <Plus className="w-4 h-4" />
-                            Add Contact
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-slate-600 dark:text-slate-300 font-medium">No contacts match your search</p>
-                          <p className="text-slate-500 dark:text-slate-400 text-sm">Try a different search term or clear the search.</p>
-                        </>
+                      <FileX className="h-10 w-10 text-zinc-600" />
+                      <p className="text-zinc-200 font-medium">No leads found</p>
+                      <p className="text-zinc-500 text-sm">Try adjusting your search query or add a new lead.</p>
+                      {contacts.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsAddModalOpen(true)}
+                          className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-violet-500 text-white rounded-lg text-sm font-medium hover:bg-violet-400"
+                        >
+                          <Plus className="w-4 h-4" />
+                          New Lead
+                        </button>
                       )}
                     </div>
                   </td>
@@ -481,31 +519,29 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                         handleContactClick(contact);
                       }
                     }}
-                    className={`hover:bg-lime-50/50 dark:hover:bg-lime-900/10 cursor-pointer transition-all duration-200 hover:scale-[1.002] hover:shadow-sm ${selectedContact?.id === contact.id ? 'bg-lime-50 dark:bg-lime-900/20' : ''}`}
+                    className={`hover:bg-violet-500/5 cursor-pointer transition-colors ${selectedContact?.id === contact.id ? 'bg-violet-500/10' : ''}`}
                   >
                     <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900 dark:text-slate-100">{contact.firstName} {contact.lastName}</div>
+                      <div className="font-semibold text-white">{contact.firstName} {contact.lastName}</div>
                     </td>
-                    <td className="px-6 py-4 hidden sm:table-cell text-slate-600 dark:text-slate-300 text-sm">
-                      {contact.email}
-                    </td>
-                    <td className="px-6 py-4 hidden md:table-cell text-slate-600 dark:text-slate-300 text-sm">
-                      {contact.phone}
-                    </td>
-                    <td className="px-6 py-4 hidden lg:table-cell text-slate-600 dark:text-slate-300 text-sm">
+                    <td className="px-6 py-4 hidden lg:table-cell text-zinc-400 text-sm">
                       {contact.company || '—'}
+                    </td>
+                    <td className="px-6 py-4 hidden sm:table-cell text-zinc-400 text-sm">
+                      <div>{contact.email}</div>
+                      <div className="text-xs text-zinc-500">{contact.phone}</div>
                     </td>
                     <td className="px-6 py-4 hidden xl:table-cell">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium 
-                        ${contact.status === ContactStatus.NewLead ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
-                          contact.status === ContactStatus.Won ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
-                            contact.status === ContactStatus.Lost ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                              'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                        ${contact.status === ContactStatus.NewLead ? 'bg-blue-500/15 text-blue-300' :
+                          contact.status === ContactStatus.Won ? 'bg-emerald-500/15 text-emerald-300' :
+                            contact.status === ContactStatus.Lost ? 'bg-red-500/15 text-red-300' :
+                              'bg-zinc-800 text-zinc-300'}`}>
                         {contact.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 hidden 2xl:table-cell text-slate-500 dark:text-slate-400">
-                      {contact.lastActivity}
+                    <td className="px-6 py-4 hidden 2xl:table-cell text-zinc-500 text-sm">
+                      {contact.source || 'Direct'}
                     </td>
                     <td className="px-6 py-4 text-right">
                       {onDeleteContact && (
@@ -513,7 +549,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                           type="button"
                           onClick={e => requestDeleteContact(contact, e)}
                           disabled={deletingId === contact.id}
-                          className="inline-flex p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-50"
+                          className="inline-flex p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                           title="Delete contact"
                           aria-label={`Delete ${contact.firstName} ${contact.lastName}`}
                         >
@@ -531,10 +567,10 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
 
       {/* Detail Slide-over */}
       {selectedContact && (
-        <div className="absolute inset-0 z-20 flex w-full flex-col border-l border-slate-200 bg-white shadow-xl transition-colors animate-slide-in-right dark:border-slate-800 dark:bg-slate-900 md:static md:w-[400px] lg:w-[450px]">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start bg-slate-50 dark:bg-slate-950">
+        <div className="absolute inset-0 z-20 flex w-full flex-col border-l border-white/[0.06] bg-[#141416] shadow-xl transition-colors animate-slide-in-right md:static md:w-[400px] lg:w-[450px]">
+          <div className="p-4 border-b border-white/[0.06] flex justify-between items-start bg-[#111214]">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-lime-100 dark:bg-lime-900/30 text-lime-700 dark:text-lime-400 flex items-center justify-center font-bold text-lg border border-lime-200 dark:border-lime-800 animate-pop-in">
+              <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 flex items-center justify-center font-bold text-lg border border-violet-200 dark:border-violet-800 animate-pop-in">
                 {selectedContact.firstName[0]}{selectedContact.lastName[0]}
               </div>
               <div>
@@ -564,21 +600,21 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
           <div className="flex border-b border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setActiveDetailTab('activity')}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${activeDetailTab === 'activity' ? 'text-lime-600 dark:text-lime-500 border-b-2 border-lime-500 bg-lime-50/50 dark:bg-lime-900/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${activeDetailTab === 'activity' ? 'text-violet-600 dark:text-violet-500 border-b-2 border-violet-500 bg-violet-50/50 dark:bg-violet-900/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
               Activity
             </button>
             <button
               onClick={() => setActiveDetailTab('info')}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${activeDetailTab === 'info' ? 'text-lime-600 dark:text-lime-500 border-b-2 border-lime-500 bg-lime-50/50 dark:bg-lime-900/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${activeDetailTab === 'info' ? 'text-violet-600 dark:text-violet-500 border-b-2 border-violet-500 bg-violet-50/50 dark:bg-violet-900/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
               Info
             </button>
             <button
               onClick={() => setActiveDetailTab('tasks')}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${activeDetailTab === 'tasks' ? 'text-lime-600 dark:text-lime-500 border-b-2 border-lime-500 bg-lime-50/50 dark:bg-lime-900/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${activeDetailTab === 'tasks' ? 'text-violet-600 dark:text-violet-500 border-b-2 border-violet-500 bg-violet-50/50 dark:bg-violet-900/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
-              Tasks {selectedContact.tasks?.filter(t => !t.completed).length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-lime-100 dark:bg-lime-900 text-[10px] font-bold text-lime-700 dark:text-lime-400 animate-pulse">{selectedContact.tasks.filter(t => !t.completed).length}</span>}
+              Tasks {selectedContact.tasks?.filter(t => !t.completed).length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900 text-[10px] font-bold text-violet-700 dark:text-violet-400 animate-pulse">{selectedContact.tasks.filter(t => !t.completed).length}</span>}
             </button>
           </div>
 
@@ -587,9 +623,9 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
             {activeDetailTab === 'activity' && (
               <>
                 {!showCallLog && (
-                  <div className="bg-gradient-to-br from-lime-50 to-emerald-50 dark:from-slate-800 dark:to-slate-900 rounded-xl p-4 border border-lime-100 dark:border-slate-700 shadow-sm animate-fade-in">
+                  <div className="bg-gradient-to-br from-violet-50 to-emerald-50 dark:from-slate-800 dark:to-slate-900 rounded-xl p-4 border border-violet-100 dark:border-slate-700 shadow-sm animate-fade-in">
                     <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-500" />
+                      <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-500" />
                       <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">AI Employee Assistant</h4>
                     </div>
 
@@ -597,7 +633,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                       <div className="space-y-3">
                         <button
                           onClick={handleGenerateSummary}
-                          className="w-full py-3 px-4 bg-lime-600 hover:bg-lime-700 text-white rounded-xl flex items-center justify-center gap-2 shadow-md transition-all font-bold transform active:scale-95 hover:shadow-lg">
+                          className="w-full py-3 px-4 bg-violet-600 hover:bg-violet-700 text-white rounded-xl flex items-center justify-center gap-2 shadow-md transition-all font-bold transform active:scale-95 hover:shadow-lg">
                           <Sparkles className="w-5 h-5" />
                           Generate Timeline Summary
                         </button>
@@ -605,8 +641,8 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             onClick={() => handleGenerateDraft('Follow up on booking')}
-                            className="p-3 bg-white dark:bg-slate-800 hover:bg-lime-50 dark:hover:bg-slate-700 border border-lime-200 dark:border-slate-600 rounded-lg text-left transition-all active:scale-95 group h-full hover:border-lime-400">
-                            <span className="flex items-center gap-1.5 text-xs font-semibold text-lime-700 dark:text-lime-400 group-hover:text-lime-800 dark:group-hover:text-lime-300 mb-1">
+                            className="p-3 bg-white dark:bg-slate-800 hover:bg-violet-50 dark:hover:bg-slate-700 border border-violet-200 dark:border-slate-600 rounded-lg text-left transition-all active:scale-95 group h-full hover:border-violet-400">
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 dark:text-violet-400 group-hover:text-violet-800 dark:group-hover:text-violet-300 mb-1">
                               <PenTool className="w-3 h-3" />
                               Draft Follow-up
                             </span>
@@ -614,8 +650,8 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                           </button>
                           <button
                             onClick={() => setShowTemplates(true)}
-                            className="p-3 bg-white dark:bg-slate-800 hover:bg-lime-50 dark:hover:bg-slate-700 border border-lime-200 dark:border-slate-600 rounded-lg text-left transition-all active:scale-95 group h-full hover:border-lime-400">
-                            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 group-hover:text-lime-700 dark:group-hover:text-lime-400 mb-1">
+                            className="p-3 bg-white dark:bg-slate-800 hover:bg-violet-50 dark:hover:bg-slate-700 border border-violet-200 dark:border-slate-600 rounded-lg text-left transition-all active:scale-95 group h-full hover:border-violet-400">
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 group-hover:text-violet-700 dark:group-hover:text-violet-400 mb-1">
                               <LayoutTemplate className="w-3 h-3" />
                               Use Template
                             </span>
@@ -626,10 +662,10 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     )}
 
                     {showTemplates && (
-                      <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-lime-200 dark:border-slate-600 shadow-sm animate-pop-in">
+                      <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-violet-200 dark:border-slate-600 shadow-sm animate-pop-in">
                         <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-100 dark:border-slate-700">
                           <h5 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                            <LayoutTemplate className="w-3 h-3 text-lime-600 dark:text-lime-500" /> Select Template
+                            <LayoutTemplate className="w-3 h-3 text-violet-600 dark:text-violet-500" /> Select Template
                           </h5>
                           <button onClick={() => setShowTemplates(false)} className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">Cancel</button>
                         </div>
@@ -638,7 +674,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                             <button
                               key={t.id}
                               onClick={() => handleUseTemplate(t.content)}
-                              className="w-full text-left px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-lime-50 dark:hover:bg-slate-700 hover:text-lime-700 dark:hover:text-lime-400 rounded-md transition-colors truncate border border-transparent hover:border-lime-100 dark:hover:border-slate-600"
+                              className="w-full text-left px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-violet-50 dark:hover:bg-slate-700 hover:text-violet-700 dark:hover:text-violet-400 rounded-md transition-colors truncate border border-transparent hover:border-violet-100 dark:hover:border-slate-600"
                             >
                               {t.label}
                             </button>
@@ -648,15 +684,15 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     )}
 
                     {isAiLoading && (
-                      <div className="flex items-center justify-center py-6 text-lime-600 dark:text-lime-400">
+                      <div className="flex items-center justify-center py-6 text-violet-600 dark:text-violet-400">
                         <Bot className="w-6 h-6 animate-bounce mr-2" />
                         <span className="text-sm font-medium">Thinking...</span>
                       </div>
                     )}
 
                     {aiSummary && (
-                      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-lime-200 dark:border-slate-600 shadow-sm animate-fade-in">
-                        <div className="flex items-center gap-2 mb-2 text-lime-700 dark:text-lime-400 font-semibold text-xs uppercase tracking-wider">
+                      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-violet-200 dark:border-slate-600 shadow-sm animate-fade-in">
+                        <div className="flex items-center gap-2 mb-2 text-violet-700 dark:text-violet-400 font-semibold text-xs uppercase tracking-wider">
                           <Sparkles className="w-3 h-3" />
                           AI Summary
                         </div>
@@ -666,18 +702,18 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     )}
 
                     {aiDraft && (
-                      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-lime-200 dark:border-slate-600 shadow-sm animate-fade-in">
-                        <div className="flex items-center gap-2 mb-2 text-lime-700 dark:text-lime-400 font-semibold text-xs uppercase tracking-wider">
+                      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-violet-200 dark:border-slate-600 shadow-sm animate-fade-in">
+                        <div className="flex items-center gap-2 mb-2 text-violet-700 dark:text-violet-400 font-semibold text-xs uppercase tracking-wider">
                           <PenTool className="w-3 h-3" />
                           Email Draft
                         </div>
                         <textarea
                           value={aiDraft}
                           onChange={(e) => setAiDraft(e.target.value)}
-                          className="w-full mb-4 text-xs font-sans text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700 leading-relaxed whitespace-pre-wrap h-32 focus:outline-none focus:ring-1 focus:ring-lime-500 resize-none"
+                          className="w-full mb-4 text-xs font-sans text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700 leading-relaxed whitespace-pre-wrap h-32 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
                         />
                         <div className="flex gap-2">
-                          <button className="flex-1 py-2 bg-lime-600 text-white rounded-lg text-xs font-bold hover:bg-lime-700 transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95">
+                          <button className="flex-1 py-2 bg-violet-600 text-white rounded-lg text-xs font-bold hover:bg-violet-700 transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95">
                             <Mail className="w-3 h-3" />
                             Send Email
                           </button>
@@ -771,7 +807,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                 <div className="space-y-6 pt-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Activity History</h4>
-                    <button className="text-[10px] text-lime-600 dark:text-lime-500 font-medium hover:underline">View All</button>
+                    <button className="text-[10px] text-violet-600 dark:text-violet-500 font-medium hover:underline">View All</button>
                   </div>
 
                   <div className="relative">
@@ -814,11 +850,11 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                 <div className="flex justify-between items-center">
                   <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Contact Details</h4>
                   {!isEditingInfo ? (
-                    <button onClick={handleStartEditInfo} className="text-xs text-lime-600 dark:text-lime-500 hover:underline">Edit Info</button>
+                    <button onClick={handleStartEditInfo} className="text-xs text-violet-600 dark:text-violet-500 hover:underline">Edit Info</button>
                   ) : (
                     <div className="flex gap-2">
                       <button onClick={() => setIsEditingInfo(false)} className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700">Cancel</button>
-                      <button onClick={handleSaveInfo} className="text-xs text-lime-600 dark:text-lime-500 font-bold hover:text-lime-700 flex items-center gap-1 active:scale-95 transition-transform"><Save className="w-3 h-3" /> Save</button>
+                      <button onClick={handleSaveInfo} className="text-xs text-violet-600 dark:text-violet-500 font-bold hover:text-violet-700 flex items-center gap-1 active:scale-95 transition-transform"><Save className="w-3 h-3" /> Save</button>
                     </div>
                   )}
                 </div>
@@ -876,7 +912,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                   <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-2 block">Tags</label>
                   <div className="flex flex-wrap gap-2">
                     {selectedContact.tags.map(tag => (
-                      <span key={tag} className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1 hover:border-lime-500 cursor-default transition-colors">
+                      <span key={tag} className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1 hover:border-violet-500 cursor-default transition-colors">
                         <Tag className="w-3 h-3" /> {tag}
                       </span>
                     ))}
@@ -899,7 +935,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
             {activeDetailTab === 'tasks' && (
               <div className="space-y-4 animate-fade-in">
                 <div className="flex items-center gap-2 mb-2">
-                  <CheckSquare className="w-4 h-4 text-lime-600" />
+                  <CheckSquare className="w-4 h-4 text-violet-600" />
                   <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Pending Tasks</h4>
                 </div>
 
@@ -909,12 +945,12 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     placeholder="Add a new task..."
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
-                    className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                    className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:outline-none"
                   />
                   <button
                     type="submit"
                     disabled={!newTaskTitle.trim()}
-                    className="bg-lime-600 hover:bg-lime-700 text-white rounded-lg px-3 py-2 transition-all disabled:opacity-50 active:scale-95"
+                    className="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-2 transition-all disabled:opacity-50 active:scale-95"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -933,7 +969,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     >
                       <button
                         onClick={() => handleToggleTask(task.id)}
-                        className={`flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all ${task.completed ? 'bg-lime-500 border-lime-500 text-white scale-110' : 'border-slate-300 dark:border-slate-600 hover:border-lime-500 text-transparent hover:scale-105'}`}
+                        className={`flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all ${task.completed ? 'bg-violet-500 border-violet-500 text-white scale-110' : 'border-slate-300 dark:border-slate-600 hover:border-violet-500 text-transparent hover:scale-105'}`}
                       >
                         <CheckSquare className="w-3.5 h-3.5 fill-current" />
                       </button>
@@ -1031,7 +1067,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
           <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-pop-in max-h-[90dvh] overflow-y-auto">
             <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
               <h3 id="add-contact-title" className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <User className="w-4 h-4 text-lime-600" /> New Contact
+                <User className="w-4 h-4 text-violet-600" /> New Contact
               </h3>
               <button onClick={() => setIsAddModalOpen(false)} aria-label="Close add contact dialog" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                 <X className="w-5 h-5" />
@@ -1048,7 +1084,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     type="text"
                     value={newContact.firstName}
                     onChange={e => setNewContact({ ...newContact, firstName: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -1059,7 +1095,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     type="text"
                     value={newContact.lastName}
                     onChange={e => setNewContact({ ...newContact, lastName: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -1072,7 +1108,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                   type="email"
                   value={newContact.email}
                   onChange={e => setNewContact({ ...newContact, email: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                 />
               </div>
 
@@ -1085,7 +1121,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     type="tel"
                     value={newContact.phone}
                     onChange={e => setNewContact({ ...newContact, phone: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -1095,7 +1131,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     type="text"
                     value={newContact.company}
                     onChange={e => setNewContact({ ...newContact, company: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -1110,7 +1146,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 transition-colors shadow-sm active:scale-95"
+                  className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95"
                 >
                   Create Contact
                 </button>
@@ -1121,6 +1157,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
       )}
       </>
       )}
+    </div>
     </div>
   );
 };

@@ -16,14 +16,14 @@ export const viewport: Viewport = {
     initialScale: 1,
     viewportFit: 'cover',
     themeColor: [
-        { media: '(prefers-color-scheme: light)', color: '#f8fafc' },
-        { media: '(prefers-color-scheme: dark)', color: '#020617' },
+        { media: '(prefers-color-scheme: light)', color: '#0b0c0e' },
+        { media: '(prefers-color-scheme: dark)', color: '#0b0c0e' },
     ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en" suppressHydrationWarning>
+        <html lang="en" className="dark" suppressHydrationWarning>
             <body className={inter.variable} suppressHydrationWarning>
                 <AuthProvider>
                     <AuthGuard>{children}</AuthGuard>

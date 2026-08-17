@@ -21,16 +21,14 @@ interface Viewport {
 }
 
 const INITIAL_NODES: WorkflowNodeState[] = [
-    { id: '1', type: 'trigger', label: 'Form Submitted', icon: 'zap', x: 100, y: 100, config: { source: 'Website Contact', formId: 'emergency-plumbing' } },
-    { id: '2', type: 'action', subType: 'sms', label: 'Send SMS', icon: 'message', x: 100, y: 300, config: { template: 'Lead Intro', message: 'Hi {name}, thanks for reaching out!' } },
-    { id: '3', type: 'delay', label: 'Wait 10m', icon: 'clock', x: 100, y: 500, config: { duration: '10', unit: 'minutes' } },
-    { id: '4', type: 'action', subType: 'call', label: 'AI Call Lead', icon: 'phone', x: 100, y: 700, config: { script: 'Qualify Lead', voice: 'Sarah' } },
+    { id: '1', type: 'trigger', label: 'Call Status: Missed', icon: 'zap', x: 100, y: 80, config: { status: 'Missed', direction: 'Inbound' } },
+    { id: '2', type: 'action', subType: 'sms', label: 'Send SMS Follow-up', icon: 'message', x: 100, y: 280, config: { message: 'Hi! Sorry we missed your call. How can we help you?' } },
+    { id: '3', type: 'action', subType: 'email', label: 'Notify Internal Team', icon: 'mail', x: 100, y: 500, config: { subject: 'Missed Call Alert', message: 'Call back ASAP' } },
 ];
 
 const INITIAL_CONNECTIONS: WorkflowConnection[] = [
     { id: 'c1', from: '1', to: '2' },
     { id: 'c2', from: '2', to: '3' },
-    { id: 'c3', from: '3', to: '4' },
 ];
 
 const WORKFLOW_TEMPLATES = [
@@ -41,8 +39,8 @@ const WORKFLOW_TEMPLATES = [
         icon: Phone,
         nodes: [
             { id: '1', type: 'trigger', label: 'Call Status', icon: 'phone-call', x: 100, y: 100, config: { status: 'Missed', direction: 'Inbound' } },
-            { id: '2', type: 'action', subType: 'sms', label: 'SMS Reply', icon: 'message', x: 100, y: 300, config: { message: 'Hi! Sorry we missed your call. How can we help you?' } },
-            { id: '3', type: 'action', subType: 'email', label: 'Notify Staff', icon: 'mail', x: 100, y: 500, config: { subject: 'Missed Call Alert', message: 'Call back ASAP' } }
+            { id: '2', type: 'action', subType: 'sms', label: 'Send SMS Follow-up', icon: 'message', x: 100, y: 300, config: { message: 'Hi! Sorry we missed your call. How can we help you?' } },
+            { id: '3', type: 'action', subType: 'email', label: 'Notify Internal Team', icon: 'mail', x: 100, y: 500, config: { subject: 'Missed Call Alert', message: 'Call back ASAP' } }
         ],
         connections: [
             { id: 'c1', from: '1', to: '2' },
@@ -110,6 +108,7 @@ export const Workflows: React.FC = () => {
     const [nodes, setNodes] = useState<WorkflowNodeState[]>(INITIAL_NODES);
     const [connections, setConnections] = useState<WorkflowConnection[]>(INITIAL_CONNECTIONS);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const [workflowName, setWorkflowName] = useState('Welcome & Lead Follow-up');
     const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
 
     // Interaction State
@@ -352,8 +351,8 @@ export const Workflows: React.FC = () => {
 
         const minX = Math.min(...nodes.map(n => n.x));
         const minY = Math.min(...nodes.map(n => n.y));
-        const maxX = Math.max(...nodes.map(n => n.x + 240));
-        const maxY = Math.max(...nodes.map(n => n.y + 100));
+        const maxX = Math.max(...nodes.map(n => n.x + 280));
+        const maxY = Math.max(...nodes.map(n => n.y + 120));
 
         const rect = containerRef.current.getBoundingClientRect();
         const padding = 100;
@@ -375,6 +374,7 @@ export const Workflows: React.FC = () => {
         setNodes(template.nodes as WorkflowNodeState[]);
         setConnections(template.connections);
         setIsTemplateModalOpen(false);
+        setWorkflowName(template.name === 'Missed Call Text Back' ? 'Welcome & Lead Follow-up' : template.name);
         showToast(`Template "${template.name}" loaded.`);
         setValidationErrors([]); // Clear errors
         // Reset viewport to default to ensure visibility of the new nodes
@@ -387,21 +387,19 @@ export const Workflows: React.FC = () => {
 
     // --- Rendering Helpers ---
     const getNodeColor = (type: string, subType?: string, status?: string) => {
-        if (status === 'error') return 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-100 ring-2 ring-red-200';
+        if (status === 'error') return 'border-red-500/50 bg-[#141416] text-red-200 ring-1 ring-red-500/40';
 
         switch (type) {
             case 'trigger':
-                if (subType === 'stage_change') return 'border-orange-500 bg-orange-50 dark:bg-orange-900/40 text-orange-900 dark:text-orange-100';
-                return 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-900 dark:text-blue-100';
-            case 'condition': return 'border-amber-500 bg-amber-50 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100';
-            case 'delay': return 'border-slate-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100';
+                return 'border-white/[0.08] bg-[#141416] text-white';
+            case 'condition':
+                return 'border-white/[0.08] bg-[#141416] text-white';
+            case 'delay':
+                return 'border-white/[0.08] bg-[#141416] text-white';
             case 'action':
-                if (subType === 'pipeline') return 'border-purple-500 bg-purple-50 dark:bg-purple-900/40 text-purple-900 dark:text-purple-100';
-                if (subType === 'review') return 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/40 text-yellow-900 dark:text-yellow-100';
-                if (subType === 'call') return 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-900 dark:text-indigo-100';
-                if (subType === 'tiktok') return 'border-pink-500 bg-pink-50 dark:bg-pink-900/40 text-pink-900 dark:text-pink-100';
-                return 'border-lime-500 bg-lime-50 dark:bg-lime-900/40 text-lime-900 dark:text-lime-100';
-            default: return 'border-slate-200';
+                return 'border-white/[0.08] bg-[#141416] text-white';
+            default:
+                return 'border-white/[0.08] bg-[#141416] text-white';
         }
     };
 
@@ -427,21 +425,24 @@ export const Workflows: React.FC = () => {
         const toNode = nodes.find(n => n.id === conn.to);
         if (!fromNode || !toNode) return null;
 
-        const startX = fromNode.x + 120;
-        const startY = fromNode.y + 80;
-        const endX = toNode.x + 120;
+        const startX = fromNode.x + 140;
+        const startY = fromNode.y + 96;
+        const endX = toNode.x + 140;
         const endY = toNode.y;
 
         const dy = Math.abs(endY - startY);
         const controlY = dy * 0.5;
 
         const path = `M ${startX} ${startY} C ${startX} ${startY + controlY}, ${endX} ${endY - controlY}, ${endX} ${endY}`;
+        const midX = (startX + endX) / 2;
+        const midY = (startY + endY) / 2;
 
         return (
             <g key={conn.id} className="group cursor-pointer" onDoubleClick={() => handleDeleteConnection(conn.id)}>
                 <path d={path} stroke="transparent" strokeWidth="15" fill="none" />
-                <path d={path} stroke="#94a3b8" strokeWidth="2" fill="none" className="group-hover:stroke-lime-500 transition-colors" />
-                <circle cx={endX} cy={endY} r="4" fill="#94a3b8" className="group-hover:fill-lime-500 transition-colors" />
+                <path d={path} stroke="#8b5cf6" strokeWidth="2" fill="none" className="group-hover:stroke-violet-300 transition-colors" />
+                <circle cx={midX} cy={midY} r="5" fill="#0B0C0E" stroke="#8b5cf6" strokeWidth="2" />
+                <circle cx={endX} cy={endY} r="4" fill="#8b5cf6" className="group-hover:fill-violet-300 transition-colors" />
             </g>
         );
     };
@@ -451,8 +452,8 @@ export const Workflows: React.FC = () => {
         const fromNode = nodes.find(n => n.id === activeNodeId);
         if (!fromNode) return null;
 
-        const startX = fromNode.x + 120;
-        const startY = fromNode.y + 80;
+        const startX = fromNode.x + 140;
+        const startY = fromNode.y + 96;
         const endX = mousePos.x;
         const endY = mousePos.y;
 
@@ -463,79 +464,43 @@ export const Workflows: React.FC = () => {
 
     const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
-    const TOOLBOX_GROUPS = [
-        {
-            title: 'Communication',
-            items: [
-                { type: 'action', subType: 'sms', label: 'Send SMS', icon: 'message', color: 'text-lime-600 bg-lime-50 dark:bg-lime-900/20 border-lime-200' },
-                { type: 'action', subType: 'email', label: 'Send Email', icon: 'mail', color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 border-amber-200' },
-                { type: 'action', subType: 'call', label: 'AI Call', icon: 'phone-call', color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200' },
-                { type: 'action', subType: 'tiktok', label: 'TikTok DM', icon: 'video', color: 'text-pink-600 bg-pink-50 dark:bg-pink-900/20 border-pink-200' },
-            ]
-        },
-        {
-            title: 'CRM & Logic',
-            items: [
-                { type: 'trigger', label: 'Form/Webhook', icon: 'zap', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 border-blue-200' },
-                { type: 'trigger', subType: 'stage_change', label: 'Stage Reached', icon: 'kanban', color: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20 border-orange-200' },
-                { type: 'action', subType: 'pipeline', label: 'Update Stage', icon: 'kanban', color: 'text-purple-600 bg-purple-50 dark:bg-purple-900/20 border-purple-200' },
-                { type: 'action', subType: 'review', label: 'Ask Review', icon: 'star', color: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200' },
-                { type: 'delay', label: 'Wait', icon: 'clock', color: 'text-slate-600 bg-slate-50 dark:bg-slate-800 border-slate-200' },
-            ]
-        }
-    ];
-
     return (
-        <div className="h-full flex flex-col relative">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-4 flex-shrink-0 px-1">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Workflow Automation</h2>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">Drag and drop nodes to build your agency automation.</p>
-                </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setIsTemplateModalOpen(true)}
-                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-lime-600 hover:border-lime-500 transition-colors flex items-center gap-2 shadow-sm"
-                    >
-                        <LayoutTemplate className="w-4 h-4" /> Templates
-                    </button>
-                    <button
-                        onClick={() => showToast('Workflow running in test mode...')}
-                        className="px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 shadow-sm"
-                    >
-                        <Play className="w-4 h-4 text-green-600" /> Test Run
-                    </button>
-                    <button
-                        onClick={handlePublish}
-                        className="px-4 py-2 bg-lime-600 text-white rounded-lg text-sm font-medium hover:bg-lime-700 transition-colors flex items-center gap-2 shadow-sm"
-                    >
-                        <Save className="w-4 h-4" /> Publish
-                    </button>
-                </div>
-            </div>
+        <div className="relative flex h-full min-h-0 flex-col">
+            <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-xl border border-[#1F1F23] bg-[#0B0C0E]">
 
-            <div className="flex-1 flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 relative shadow-inner">
-
-                {/* Sidebar Tools */}
-                <div className="w-16 md:w-56 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-10 shadow-lg overflow-y-auto">
-                    {TOOLBOX_GROUPS.map((group, idx) => (
-                        <div key={idx} className="p-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
-                            <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 hidden md:block">{group.title}</h3>
-                            <div className="space-y-2">
-                                {group.items.map((item) => (
-                                    <button
-                                        key={item.label}
-                                        onClick={() => handleAddNode(item)}
-                                        className={`w-full flex md:flex-row flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:scale-105 active:scale-95 shadow-sm ${item.color} dark:border-slate-700`}
-                                    >
-                                        {getNodeIcon(item.icon)}
-                                        <span className="text-xs font-bold hidden md:inline">{item.label}</span>
-                                    </button>
-                                ))}
-                            </div>
+                <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-3">
+                    <div className="pointer-events-auto flex flex-wrap items-center gap-2">
+                        <div className="rounded-full border border-zinc-800 bg-[#141416] px-3 py-1.5 text-sm font-semibold text-white">
+                            {workflowName}
                         </div>
-                    ))}
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            Active Workflow
+                        </span>
+                    </div>
+                    <div className="pointer-events-auto flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setIsTemplateModalOpen(true)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#141416] px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-white/[0.04]"
+                        >
+                            <LayoutTemplate className="h-4 w-4" /> Templates
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => showToast('Workflow running in test mode...')}
+                            className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400"
+                        >
+                            <Play className="h-4 w-4 fill-current" /> Test Run
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handlePublish}
+                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#141416] px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-white/[0.04]"
+                        >
+                            <Save className="h-4 w-4" /> Publish
+                        </button>
+                    </div>
                 </div>
 
                 {/* Main Canvas */}
@@ -549,9 +514,9 @@ export const Workflows: React.FC = () => {
                 >
                     {/* Infinite Grid Background */}
                     <div
-                        className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-10"
+                        className="pointer-events-none absolute inset-0 opacity-40"
                         style={{
-                            backgroundImage: 'radial-gradient(#64748b 1px, transparent 1px)',
+                            backgroundImage: 'radial-gradient(#3f3f46 1px, transparent 1px)',
                             backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
                             backgroundPosition: `${viewport.x}px ${viewport.y}px`
                         }}
@@ -572,12 +537,12 @@ export const Workflows: React.FC = () => {
                             <g>
                                 {/* Vertical Guide */}
                                 <div
-                                    className="absolute top-[-5000px] bottom-[-5000px] w-px bg-lime-500/50 z-0 pointer-events-none border-l border-dashed border-lime-500"
+                                    className="absolute top-[-5000px] bottom-[-5000px] w-px bg-violet-500/50 z-0 pointer-events-none border-l border-dashed border-violet-500"
                                     style={{ left: `${guideLines.x + 120}px` }} // Center of node width
                                 />
                                 {/* Horizontal Guide */}
                                 <div
-                                    className="absolute left-[-5000px] right-[-5000px] h-px bg-lime-500/50 z-0 pointer-events-none border-t border-dashed border-lime-500"
+                                    className="absolute left-[-5000px] right-[-5000px] h-px bg-violet-500/50 z-0 pointer-events-none border-t border-dashed border-violet-500"
                                     style={{ top: `${guideLines.y + 40}px` }} // Center of node height
                                 />
                             </g>
@@ -590,98 +555,121 @@ export const Workflows: React.FC = () => {
                         </svg>
 
                         {/* Nodes Layer */}
-                        {nodes.map(node => (
+                        {nodes.map(node => {
+                            const isTrigger = node.type === 'trigger';
+                            const isDelay = node.type === 'delay';
+                            const preview = node.errorMessage
+                                ? node.errorMessage
+                                : node.subType === 'stage_change'
+                                    ? `Trigger on: ${node.config.pipelineStage || 'Any Stage'}`
+                                    : node.subType === 'pipeline'
+                                        ? `Move to: ${node.config.stageName || 'Select Stage'}`
+                                        : node.subType === 'review'
+                                            ? `Platform: ${node.config.platform || 'Google'}`
+                                            : node.subType === 'call'
+                                                ? (node.config.script || 'Click to configure step parameters')
+                                                : (node.subType === 'sms' || node.subType === 'tiktok' || node.subType === 'email')
+                                                    ? (node.config.message ? `"${node.config.message}"` : 'Click to configure step parameters')
+                                                    : isDelay
+                                                        ? `Wait ${node.config.duration || 0} ${node.config.unit || 'mins'}`
+                                                        : 'Click to configure step parameters';
+
+                            return (
                             <div
                                 key={node.id}
                                 data-node-id={node.id}
                                 style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
-                                className={`absolute w-60 rounded-xl shadow-sm border-2 p-0 z-10 pointer-events-auto transition-shadow group
+                                className={`absolute z-10 w-[280px] rounded-xl border p-4 shadow-lg pointer-events-auto transition-shadow group
                             ${getNodeColor(node.type, node.subType, node.status)}
-                            ${selectedNodeId === node.id ? 'ring-2 ring-lime-500 ring-offset-2 dark:ring-offset-slate-900 shadow-xl' : 'hover:shadow-md'}
+                            ${selectedNodeId === node.id ? 'ring-2 ring-violet-500/70' : 'hover:border-white/20'}
                         `}
                             >
-                                {/* Error Indicator */}
                                 {node.status === 'error' && (
-                                    <div className="absolute -top-3 -right-3 z-20 bg-red-500 text-white rounded-full p-1 shadow-md animate-bounce">
-                                        <AlertTriangle className="w-4 h-4" />
+                                    <div className="absolute -top-3 -right-3 z-20 rounded-full bg-red-500 p-1 text-white shadow-md animate-bounce">
+                                        <AlertTriangle className="h-4 w-4" />
                                     </div>
                                 )}
 
-                                {/* Input Handle */}
                                 {node.type !== 'trigger' && (
-                                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-3 flex justify-center">
-                                        <div className="w-3 h-3 bg-slate-400 dark:bg-slate-600 rounded-full border-2 border-white dark:border-slate-900" />
+                                    <div className="absolute -top-3 left-1/2 flex h-3 w-6 -translate-x-1/2 justify-center">
+                                        <div className="h-3 w-3 rounded-full border-2 border-[#0B0C0E] bg-violet-500" />
                                     </div>
                                 )}
 
-                                {/* Header */}
-                                <div className="p-3 flex items-center gap-3 border-b border-black/5 dark:border-white/10 select-none">
-                                    <div className="p-1.5 bg-white/50 dark:bg-black/20 rounded-lg backdrop-blur-sm">
+                                <p className={`mb-3 text-[10px] font-bold uppercase tracking-[0.16em] ${isTrigger ? 'text-violet-400' : isDelay ? 'text-zinc-400' : 'text-emerald-400'}`}>
+                                    {isTrigger ? 'Trigger' : isDelay ? 'Delay' : 'Action'}
+                                </p>
+                                <div className="flex items-start gap-3">
+                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isTrigger ? 'bg-violet-500/15 text-violet-400' : isDelay ? 'bg-zinc-800 text-zinc-300' : 'bg-emerald-500/15 text-emerald-400'}`}>
                                         {getNodeIcon(node.icon)}
                                     </div>
-                                    <span className="font-bold text-sm flex-1 truncate">{node.label}</span>
-                                    <GripHorizontal className="w-4 h-4 opacity-0 group-hover:opacity-50" />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate font-semibold text-white">{node.label}</p>
+                                        <p className={`mt-1 line-clamp-2 text-xs ${node.errorMessage ? 'font-bold text-red-400' : 'italic text-zinc-500'}`}>
+                                            {preview}
+                                        </p>
+                                    </div>
+                                    <GripHorizontal className="h-4 w-4 shrink-0 text-zinc-600 opacity-0 group-hover:opacity-100" />
                                 </div>
 
-                                {/* Body Preview */}
-                                <div className="p-3 text-xs opacity-80 select-none min-h-[40px]">
-                                    {node.errorMessage ? (
-                                        <span className="text-red-600 dark:text-red-300 font-bold">{node.errorMessage}</span>
-                                    ) : (
-                                        <>
-                                            {node.subType === 'stage_change' && `Trigger on: ${node.config.pipelineStage || 'Any Stage'}`}
-                                            {node.subType === 'pipeline' && `Move to: ${node.config.stageName || 'Select Stage'}`}
-                                            {node.subType === 'review' && `Platform: ${node.config.platform || 'Google'}`}
-                                            {node.subType === 'call' && `Script: ${node.config.script?.substring(0, 20) || 'None'}...`}
-                                            {(node.subType === 'sms' || node.subType === 'tiktok') && (node.config.message || 'Enter message...').substring(0, 30)}
-                                            {!node.subType && node.type === 'delay' && `${node.config.duration || 0} ${node.config.unit || 'mins'}`}
-                                        </>
-                                    )}
-                                </div>
-
-                                {/* Output Handle */}
                                 <div
-                                    className="absolute -bottom-4 left-0 w-full h-6 flex items-center justify-center cursor-crosshair group/handle"
+                                    className="absolute -bottom-4 left-0 flex h-6 w-full cursor-crosshair items-center justify-center group/handle"
                                     data-handle="output"
                                     data-node-id={node.id}
                                 >
-                                    <div
-                                        className="w-4 h-4 bg-white dark:bg-slate-800 border-2 border-lime-500 rounded-full flex items-center justify-center transition-transform group-hover/handle:scale-125 pointer-events-none"
-                                    >
-                                        <div className="w-1.5 h-1.5 bg-lime-500 rounded-full" />
+                                    <div className="pointer-events-none flex h-4 w-4 items-center justify-center rounded-full border-2 border-violet-500 bg-[#0B0C0E] transition-transform group-hover/handle:scale-125">
+                                        <div className="h-1.5 w-1.5 rounded-full bg-violet-500" />
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* Canvas Controls */}
-                    <div className="absolute bottom-6 left-6 flex flex-col gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-lg">
-                        <button onClick={() => setViewport(v => ({ ...v, zoom: Math.min(v.zoom + 0.1, 3) }))} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300">
-                            <ZoomIn className="w-4 h-4" />
+                    <div className="absolute left-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-lg border border-zinc-800 bg-[#141416] p-1 shadow-lg">
+                        <button type="button" onClick={() => setViewport(v => ({ ...v, zoom: Math.min(v.zoom + 0.1, 3) }))} className="rounded p-2 text-zinc-400 hover:bg-white/[0.06] hover:text-white">
+                            <ZoomIn className="h-4 w-4" />
                         </button>
-                        <button onClick={() => setViewport(v => ({ ...v, zoom: Math.max(v.zoom - 0.1, 0.1) }))} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300">
-                            <ZoomOut className="w-4 h-4" />
+                        <button type="button" onClick={() => setViewport(v => ({ ...v, zoom: Math.max(v.zoom - 0.1, 0.1) }))} className="rounded p-2 text-zinc-400 hover:bg-white/[0.06] hover:text-white">
+                            <ZoomOut className="h-4 w-4" />
                         </button>
-                        <button onClick={centerView} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" title="Fit to View">
-                            <Maximize className="w-4 h-4" />
+                        <button type="button" onClick={centerView} className="rounded p-2 text-zinc-400 hover:bg-white/[0.06] hover:text-white" title="Fit to View">
+                            <Maximize className="h-4 w-4" />
                         </button>
                     </div>
 
-                    <div className="absolute bottom-6 right-6 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-full text-xs font-mono text-slate-500 border border-slate-200 dark:border-slate-800 pointer-events-none">
+                    <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => handleAddNode({ type: 'action', subType: 'sms', label: 'Send SMS Follow-up', icon: 'message', defaultConfig: { message: '' } })}
+                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#141416] px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-white/[0.04]"
+                        >
+                            <Plus className="h-4 w-4" /> Add Action
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleAddNode({ type: 'delay', label: 'Wait', icon: 'clock', defaultConfig: { duration: '10', unit: 'minutes' } })}
+                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#141416] px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-white/[0.04]"
+                        >
+                            <Clock className="h-4 w-4" /> Add Delay
+                        </button>
+                    </div>
+
+                    <div className="pointer-events-none absolute bottom-6 right-6 rounded-full border border-zinc-800 bg-[#141416]/90 px-3 py-1.5 font-mono text-xs text-zinc-500">
                         {Math.round(viewport.zoom * 100)}%
                     </div>
                 </div>
 
                 {/* Property Panel */}
                 {selectedNode && (
-                    <div className="w-80 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl z-20 animate-slide-in-right absolute right-0 top-0 bottom-0">
-                        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
-                            <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                <Settings className="w-4 h-4" /> Properties
+                    <div className="absolute right-0 top-0 bottom-0 z-20 flex w-80 animate-slide-in-right flex-col border-l border-[#1F1F23] bg-[#141416] shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#111214] p-4">
+                            <h3 className="flex items-center gap-2 font-bold text-white">
+                                <Settings className="h-4 w-4" /> Properties
                             </h3>
-                            <button onClick={() => setSelectedNodeId(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                                <X className="w-5 h-5" />
+                            <button type="button" onClick={() => setSelectedNodeId(null)} className="text-zinc-400 hover:text-zinc-200">
+                                <X className="h-5 w-5" />
                             </button>
                         </div>
 
@@ -692,7 +680,7 @@ export const Workflows: React.FC = () => {
                                     type="text"
                                     value={selectedNode.label}
                                     onChange={(e) => setNodes(nodes.map(n => n.id === selectedNode.id ? { ...n, label: e.target.value } : n))}
-                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full rounded-lg border border-zinc-800 bg-[#0B0C0E] p-2.5 text-sm text-zinc-100 outline-none focus:ring-2 focus:ring-violet-500"
                                 />
                             </div>
 
@@ -763,7 +751,7 @@ export const Workflows: React.FC = () => {
                                             rows={4}
                                             value={selectedNode.config.script || ''}
                                             onChange={(e) => setNodes(nodes.map(n => n.id === selectedNode.id ? { ...n, config: { ...n.config, script: e.target.value }, status: 'idle', errorMessage: undefined } : n))}
-                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                             placeholder="Instructions for the AI..."
                                         />
                                     </div>
@@ -793,7 +781,7 @@ export const Workflows: React.FC = () => {
                                             rows={6}
                                             value={selectedNode.config.message || ''}
                                             onChange={(e) => setNodes(nodes.map(n => n.id === selectedNode.id ? { ...n, config: { ...n.config, message: e.target.value }, status: 'idle', errorMessage: undefined } : n))}
-                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                             placeholder="Enter message content..."
                                         />
                                     </div>
@@ -801,10 +789,11 @@ export const Workflows: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                        <div className="border-t border-white/[0.06] bg-[#111214] p-4">
                             <button
+                                type="button"
                                 onClick={() => handleDeleteNode(selectedNode.id)}
-                                className="w-full flex items-center justify-center gap-2 p-3 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-sm font-bold transition-colors"
+                                className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-500/10 p-3 text-sm font-bold text-red-400 transition-colors hover:bg-red-500/20"
                             >
                                 <Trash2 className="w-4 h-4" /> Delete Step
                             </button>
@@ -847,13 +836,13 @@ export const Workflows: React.FC = () => {
                 {/* Template Modal */}
                 {isTemplateModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in">
-                        <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
-                            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
-                                <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                    <LayoutTemplate className="w-4 h-4 text-lime-600" /> Start from Template
+                        <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#141416] shadow-xl">
+                            <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#111214] p-4">
+                                <h3 className="flex items-center gap-2 font-bold text-white">
+                                    <LayoutTemplate className="h-4 w-4 text-violet-400" /> Start from Template
                                 </h3>
-                                <button onClick={() => setIsTemplateModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                                    <X className="w-5 h-5" />
+                                <button type="button" onClick={() => setIsTemplateModalOpen(false)} className="text-zinc-400 hover:text-zinc-200">
+                                    <X className="h-5 w-5" />
                                 </button>
                             </div>
 
@@ -864,19 +853,19 @@ export const Workflows: React.FC = () => {
                                         <button
                                             key={template.id}
                                             onClick={() => handleLoadTemplate(template)}
-                                            className="flex flex-col text-left p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-lime-500 hover:ring-1 hover:ring-lime-500 bg-white dark:bg-slate-800 transition-all group"
+                                            className="group flex flex-col rounded-xl border border-white/[0.08] bg-[#0B0C0E] p-4 text-left transition-all hover:border-violet-500 hover:ring-1 hover:ring-violet-500"
                                         >
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-10 h-10 rounded-lg bg-lime-50 dark:bg-lime-900/20 text-lime-600 dark:text-lime-400 flex items-center justify-center group-hover:bg-lime-600 group-hover:text-white transition-colors">
-                                                    <Icon className="w-5 h-5" />
+                                            <div className="mb-3 flex items-center gap-3">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400 transition-colors group-hover:bg-violet-500 group-hover:text-white">
+                                                    <Icon className="h-5 w-5" />
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-bold text-slate-800 dark:text-slate-100">{template.name}</h4>
-                                                    <span className="text-xs text-slate-400 dark:text-slate-500">{template.nodes.length} Steps</span>
+                                                    <h4 className="font-bold text-white">{template.name}</h4>
+                                                    <span className="text-xs text-zinc-500">{template.nodes.length} Steps</span>
                                                 </div>
                                             </div>
-                                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 flex-1">{template.description}</p>
-                                            <div className="flex items-center gap-2 text-xs font-bold text-lime-600 dark:text-lime-400 group-hover:underline">
+                                            <p className="mb-4 flex-1 text-sm text-zinc-400">{template.description}</p>
+                                            <div className="flex items-center gap-2 text-xs font-bold text-violet-400 group-hover:underline">
                                                 Use Template <ArrowRight className="w-3 h-3" />
                                             </div>
                                         </button>
@@ -890,7 +879,7 @@ export const Workflows: React.FC = () => {
                 {/* Automation Toast */}
                 {toast.visible && (
                     <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-xl flex items-center gap-3 animate-fade-in z-50 ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-800 text-white'}`}>
-                        {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Zap className="w-5 h-5 text-lime-400 fill-current" />}
+                        {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Zap className="w-5 h-5 text-violet-400 fill-current" />}
                         <span className="font-medium text-sm">{toast.message}</span>
                     </div>
                 )}

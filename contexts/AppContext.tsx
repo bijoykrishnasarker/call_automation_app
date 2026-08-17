@@ -85,7 +85,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [bookingsLoading, setBookingsLoading] = useState(true);
     const [bookingsError, setBookingsError] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
-    const [darkMode, setDarkMode] = useState(false);
+    const [darkMode, setDarkMode] = useState(true);
     const [crmAction, setCrmAction] = useState<CRMActionRequest | undefined>(undefined);
 
     useEffect(() => {

@@ -45,7 +45,7 @@ export function buildBookingWebhookTools(
       function: {
         name: 'check_availability',
         description:
-          'Check the business calendar. Call this BEFORE booking. If the requested time is already taken, tell the caller that time is booked and offer the suggestedSlots display times (for example 3:30 PM).',
+          'Look up the live business calendar in Supabase. Call this BEFORE offering or booking a time. Returns isAvailable, suggestedSlots, and today. If isAvailable is false, that time is already booked — tell the caller and offer suggestedSlots display times.',
         parameters: {
           type: 'object',
           properties: {
@@ -85,18 +85,29 @@ export function buildBookingWebhookTools(
       function: {
         name: 'book_appointment',
         description:
-          'Save a confirmed appointment to the business calendar. Only call after check_availability says the slot is free and the caller confirmed it. The event will appear on the Calendar page.',
+          'Save the appointment to the live calendar (Supabase bookings). The event then appears on the Calendar page. Only call after check_availability says the slot is free and the caller confirmed the time.',
         parameters: {
           type: 'object',
           properties: {
             customerName: { type: 'string', description: "Caller's name." },
             customerPhone: { type: 'string', description: "Caller's phone (E.164 preferred)." },
             customerEmail: { type: 'string', description: "Caller's email address." },
-            startAt: { type: 'string', description: 'Confirmed start ISO8601.' },
-            endAt: { type: 'string', description: 'Confirmed end ISO8601.' },
+            startAt: {
+              type: 'string',
+              description: 'Confirmed start ISO8601 with offset. Must use the current calendar year unless the caller named another year.',
+            },
+            endAt: { type: 'string', description: 'Confirmed end ISO8601 with offset.' },
+            localDate: {
+              type: 'string',
+              description: 'Preferred if ISO is uncertain. Calendar date YYYY-MM-DD in the current year, for example 2026-08-16.',
+            },
+            localTime: {
+              type: 'string',
+              description: 'Local time HH:mm (24-hour), for example 15:00 for 3:00 PM.',
+            },
             timezone: {
               type: 'string',
-              description: 'Original IANA timezone for the confirmed appointment.',
+              description: 'Original IANA timezone for the confirmed appointment, usually Asia/Dhaka.',
             },
             subject: { type: 'string', description: 'Appointment subject or service name.' },
             callNotes: {
@@ -104,7 +115,7 @@ export function buildBookingWebhookTools(
               description: 'Short summary of what they booked.',
             },
           },
-            required: ['customerName', 'startAt', 'endAt', 'timezone', 'subject'],
+            required: ['customerName', 'timezone', 'subject'],
         },
       },
     });

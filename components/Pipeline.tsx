@@ -4,7 +4,7 @@ import React, { useState, useRef, MouseEvent, useEffect } from 'react';
 import { Deal, Pipeline as PipelineType } from '@/types';
 import { useApp } from '@/contexts/AppContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { MoreHorizontal, GripVertical, Plus, Settings, Trash2, Check, Layout, ChevronDown, Zap, BarChart3, DollarSign, X, Briefcase, Headphones, Users, PenTool } from 'lucide-react';
+import { MoreHorizontal, GripVertical, Plus, Settings, Trash2, Check, Layout, ChevronDown, Zap, DollarSign, X, Briefcase, Headphones, Users, PenTool } from 'lucide-react';
 
 // Simple particle for confetti
 interface Particle {
@@ -52,7 +52,7 @@ const PIPELINE_TEMPLATES = [
             { name: 'Applied', color: 'bg-slate-500' },
             { name: 'Screening', color: 'bg-blue-500' },
             { name: 'Interview', color: 'bg-indigo-500' },
-            { name: 'Offer Sent', color: 'bg-lime-500' },
+            { name: 'Offer Sent', color: 'bg-violet-500' },
             { name: 'Hired', color: 'bg-green-600', hasAutomation: true }
         ]
     },
@@ -305,7 +305,7 @@ export const Pipeline: React.FC = () => {
 
     const handleAddStage = async () => {
         if (!newStageName.trim() || !activePipelineId) return;
-        const colors = ['bg-blue-500', 'bg-orange-500', 'bg-lime-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500'];
+        const colors = ['bg-blue-500', 'bg-orange-500', 'bg-violet-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500'];
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
         const created = await addStage(activePipelineId, { name: newStageName.trim(), color: randomColor });
         if (created) setNewStageName('');
@@ -324,8 +324,8 @@ export const Pipeline: React.FC = () => {
     if (pipelinesLoading) {
         return (
             <div className="h-full flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400">
-                    <div className="w-8 h-8 border-2 border-lime-500 border-t-transparent rounded-full animate-spin" />
+                <div className="flex flex-col items-center gap-3 text-zinc-500">
+                    <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
                     <p className="text-sm font-medium">Loading pipelines…</p>
                 </div>
             </div>
@@ -340,25 +340,105 @@ export const Pipeline: React.FC = () => {
         );
     }
 
-    if (!pipelines.length) {
+    const hasPipelines = pipelines.length > 0;
+    const dealCount = activeDeals.length;
+    const dealValue = activeDeals.reduce((sum, d) => sum + d.value, 0);
+    const showBoard = hasPipelines && activeStages.length > 0 && (isEditMode || dealCount > 0);
+
+    const openNewDeal = () => {
+        if (!hasPipelines) {
+            handleOpenCreatePipeline();
+            return;
+        }
+        setIsAddDealModalOpen(true);
+    };
+
+    const openEditStages = () => {
+        if (!hasPipelines) {
+            handleOpenCreatePipeline();
+            return;
+        }
+        setIsEditMode((value) => !value);
+    };
+
+    if (!hasPipelines) {
         return (
-            <div className="h-full flex flex-col relative overflow-hidden">
-                <div className="h-full flex flex-col items-center justify-center gap-4 text-slate-600 dark:text-slate-300">
-                    <p className="text-sm font-medium">No pipelines yet</p>
-                    <button
-                        onClick={handleOpenCreatePipeline}
-                        className="px-4 py-2 bg-lime-600 text-white rounded-lg text-sm font-medium hover:bg-lime-700 transition-colors"
-                    >
-                        Create your first pipeline
-                    </button>
+            <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex flex-col gap-3 border-b border-white/[0.06] py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative flex flex-wrap items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!hasPipelines) handleOpenCreatePipeline();
+                                else setShowPipelineSelector((value) => !value);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#141416] px-3 py-2 text-sm font-semibold text-white hover:border-zinc-700"
+                        >
+                            {activePipeline?.name || 'Sales Pipeline'}
+                            <ChevronDown className="h-4 w-4 text-zinc-500" />
+                        </button>
+                        <span className="rounded-md border border-zinc-800 bg-[#141416] px-2.5 py-1 text-xs font-medium text-zinc-400">
+                            {dealCount} deals (${dealValue.toLocaleString()})
+                        </span>
+                        {showPipelineSelector && hasPipelines && (
+                            <div className="absolute top-full left-0 z-50 mt-2 w-64 origin-top-left animate-pop-in rounded-xl border border-white/[0.08] bg-[#141416] p-1 shadow-xl">
+                                <div className="px-3 py-2 text-xs font-bold uppercase text-zinc-500">Select Pipeline</div>
+                                {pipelines.map(p => (
+                                    <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => { setActivePipelineId(p.id); setShowPipelineSelector(false); }}
+                                        className={`mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                            activePipelineId === p.id
+                                                ? 'bg-violet-500/10 font-medium text-violet-300'
+                                                : 'text-zinc-300 hover:bg-white/[0.04]'
+                                        }`}
+                                    >
+                                        {p.name}
+                                        {activePipelineId === p.id && <Check className="h-3 w-3" />}
+                                    </button>
+                                ))}
+                                <div className="my-1 h-px bg-white/[0.06]" />
+                                <button
+                                    type="button"
+                                    onClick={handleOpenCreatePipeline}
+                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-zinc-500 transition-colors hover:bg-white/[0.04] hover:text-violet-400"
+                                >
+                                    <Plus className="h-3 w-3" /> Create New Pipeline
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={openEditStages}
+                            className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium ${
+                                isEditMode
+                                    ? 'border-violet-500/30 bg-violet-500/15 text-violet-300'
+                                    : 'border-zinc-800 bg-[#141416] text-zinc-200 hover:bg-white/[0.04]'
+                            }`}
+                        >
+                            {isEditMode ? <Check className="h-4 w-4" /> : <Settings className="h-4 w-4" />}
+                            {isEditMode ? 'Done Editing' : 'Edit Stages'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={openNewDeal}
+                            className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400"
+                        >
+                            <Plus className="h-4 w-4" />
+                            New Deal
+                        </button>
+                    </div>
                 </div>
-                {/* Create Pipeline Modal - same as below, so "Create your first pipeline" can open it */}
+                <div className="flex-1 bg-[#0B0C0E]" />
                 {isCreatePipelineModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in">
                         <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden modal-content flex flex-col max-h-[90vh] animate-pop-in">
                             <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                                 <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                    <Layout className="w-4 h-4 text-lime-600" /> Create New Pipeline
+                                    <Layout className="w-4 h-4 text-violet-600" /> Create New Pipeline
                                 </h3>
                                 <button onClick={() => setIsCreatePipelineModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                                     <X className="w-5 h-5" />
@@ -375,10 +455,10 @@ export const Pipeline: React.FC = () => {
                                                     key={template.id}
                                                     type="button"
                                                     onClick={() => setSelectedTemplateId(template.id)}
-                                                    className={`w-full text-left p-3 rounded-lg border transition-all active:scale-95 ${selectedTemplateId === template.id ? 'bg-white dark:bg-slate-800 border-lime-500 ring-1 ring-lime-500 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-lime-300 dark:hover:border-lime-700'}`}
+                                                    className={`w-full text-left p-3 rounded-lg border transition-all active:scale-95 ${selectedTemplateId === template.id ? 'bg-white dark:bg-slate-800 border-violet-500 ring-1 ring-violet-500 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-violet-300 dark:hover:border-violet-700'}`}
                                                 >
                                                     <div className="flex items-center gap-2 mb-1">
-                                                        <Icon className={`w-4 h-4 ${selectedTemplateId === template.id ? 'text-lime-600' : 'text-slate-400'}`} />
+                                                        <Icon className={`w-4 h-4 ${selectedTemplateId === template.id ? 'text-violet-600' : 'text-slate-400'}`} />
                                                         <span className={`text-sm font-bold ${selectedTemplateId === template.id ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>{template.label}</span>
                                                     </div>
                                                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{template.description}</p>
@@ -397,7 +477,7 @@ export const Pipeline: React.FC = () => {
                                                 placeholder={PIPELINE_TEMPLATES.find(t => t.id === selectedTemplateId)?.label || 'My Pipeline'}
                                                 value={customPipelineName}
                                                 onChange={(e) => setCustomPipelineName(e.target.value)}
-                                                className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none transition-shadow"
+                                                className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none transition-shadow"
                                             />
                                         </div>
                                         <div>
@@ -408,7 +488,7 @@ export const Pipeline: React.FC = () => {
                                                         <div className={`w-3 h-3 rounded-full ${stage.color}`}></div>
                                                         <span className="text-sm font-medium text-slate-700 dark:text-slate-200 flex-1">{stage.name}</span>
                                                         {stage.hasAutomation && (
-                                                            <div className="flex items-center gap-1 text-[10px] font-bold text-lime-600 bg-lime-50 dark:bg-lime-900/20 px-2 py-0.5 rounded">
+                                                            <div className="flex items-center gap-1 text-[10px] font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded">
                                                                 <Zap className="w-3 h-3" /> Automation
                                                             </div>
                                                         )}
@@ -423,7 +503,7 @@ export const Pipeline: React.FC = () => {
                                 <button type="button" onClick={() => setIsCreatePipelineModalOpen(false)} className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-95">
                                     Cancel
                                 </button>
-                                <button type="submit" form="create-pipeline-form-empty" className="px-4 py-2 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 transition-colors shadow-sm active:scale-95">
+                                <button type="submit" form="create-pipeline-form-empty" className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95">
                                     Create Pipeline
                                 </button>
                             </div>
@@ -441,7 +521,7 @@ export const Pipeline: React.FC = () => {
     }
 
     return (
-        <div className="flex min-h-[70dvh] flex-col overflow-hidden relative lg:h-[calc(100dvh-10rem)]">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Confetti Layer */}
             {confetti.length > 0 && (
                 <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
@@ -461,45 +541,44 @@ export const Pipeline: React.FC = () => {
             )}
 
             {/* Header with Pipeline Switcher */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                <div className="relative">
+            <div className="flex flex-col gap-3 border-b border-white/[0.06] py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative flex flex-wrap items-center gap-3">
                     <div
-                        className="flex items-center gap-2 cursor-pointer group select-none"
+                        className="flex cursor-pointer select-none items-center gap-2 rounded-lg border border-zinc-800 bg-[#141416] px-3 py-2 group"
                         onClick={() => setShowPipelineSelector(!showPipelineSelector)}
                     >
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 group-hover:text-lime-600 transition-colors">
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
                             {activePipeline.name}
-                            <ChevronDown className={`w-5 h-5 text-slate-400 group-hover:text-lime-600 transition-all duration-300 ${showPipelineSelector ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${showPipelineSelector ? 'rotate-180' : ''}`} />
                         </h2>
                     </div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2 animate-fade-in">
-                        <BarChart3 className="w-3 h-3" />
-                        {activeDeals.length} Active Deals • Value: ${activeDeals.reduce((sum, d) => sum + d.value, 0).toLocaleString()}
-                    </p>
+                    <span className="rounded-md border border-zinc-800 bg-[#141416] px-2.5 py-1 text-xs font-medium text-zinc-400">
+                        {dealCount} deals (${dealValue.toLocaleString()})
+                    </span>
 
                     {/* Pipeline Dropdown */}
                     {showPipelineSelector && (
-                        <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-pop-in p-1 origin-top-left">
-                            <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase px-3 py-2">Select Pipeline</div>
+                        <div className="absolute top-full left-0 z-50 mt-2 w-64 origin-top-left animate-pop-in rounded-xl border border-white/[0.08] bg-[#141416] p-1 shadow-xl">
+                            <div className="px-3 py-2 text-xs font-bold uppercase text-zinc-500">Select Pipeline</div>
                             {pipelines.map(p => (
                                 <button
                                     key={p.id}
                                     onClick={() => { setActivePipelineId(p.id); setShowPipelineSelector(false); }}
-                                    className={`w-full text-left px-3 py-2 text-sm rounded-lg flex justify-between items-center mb-0.5 transition-colors
+                                    className={`mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors
                                 ${activePipelineId === p.id
-                                            ? 'bg-lime-50 dark:bg-lime-900/20 text-lime-700 dark:text-lime-400 font-medium'
-                                            : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                            ? 'bg-violet-500/10 font-medium text-violet-300'
+                                            : 'text-zinc-300 hover:bg-white/[0.04]'}`}
                                 >
                                     {p.name}
-                                    {activePipelineId === p.id && <Check className="w-3 h-3" />}
+                                    {activePipelineId === p.id && <Check className="h-3 w-3" />}
                                 </button>
                             ))}
-                            <div className="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
+                            <div className="my-1 h-px bg-white/[0.06]"></div>
                             <button
                                 onClick={handleOpenCreatePipeline}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-lime-600 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg flex items-center gap-2 transition-colors"
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-zinc-500 transition-colors hover:bg-white/[0.04] hover:text-violet-400"
                             >
-                                <Plus className="w-3 h-3" /> Create New Pipeline
+                                <Plus className="h-3 w-3" /> Create New Pipeline
                             </button>
                         </div>
                     )}
@@ -508,30 +587,32 @@ export const Pipeline: React.FC = () => {
                 <div className="flex gap-2">
                     <button
                         onClick={() => setIsEditMode(!isEditMode)}
-                        className={`px-4 py-2 border rounded-lg text-sm font-medium transition-all active:scale-95 flex items-center gap-2
+                        className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all active:scale-95
                 ${isEditMode
-                                ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900'
-                                : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                ? 'border-violet-500/30 bg-violet-500/15 text-violet-300'
+                                : 'border-zinc-800 bg-[#141416] text-zinc-200 hover:bg-white/[0.04]'}`}
                     >
-                        {isEditMode ? <Check className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
+                        {isEditMode ? <Check className="h-4 w-4" /> : <Settings className="h-4 w-4" />}
                         {isEditMode ? 'Done Editing' : 'Edit Stages'}
                     </button>
                     <button
                         onClick={() => setIsAddDealModalOpen(true)}
-                        className="px-4 py-2 bg-lime-600 text-white rounded-lg text-sm font-medium hover:bg-lime-700 transition-all active:scale-95 flex items-center gap-2 shadow-sm hover:shadow-md"
+                        className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-violet-400 active:scale-95"
                     >
-                        <Plus className="w-4 h-4" /> Add Deal
+                        <Plus className="h-4 w-4" /> New Deal
                     </button>
                 </div>
             </div>
 
-            {isCompactLayout ? (
+            {!showBoard ? (
+                <div className="flex-1 bg-[#0B0C0E]" />
+            ) : isCompactLayout ? (
                 <div className="surface-scroll flex-1 overflow-y-auto pb-4 pr-1 space-y-4">
                     {activeStages.map(stage => {
                         const stageDeals = activeDeals.filter(d => d.stageId === stage.id);
                         return (
-                            <section key={stage.id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40">
-                                <div className={`flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 ${stage.hasAutomation ? 'border-t-2 border-t-lime-500' : ''}`}>
+                            <section key={stage.id} className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#111214]">
+                                <div className={`flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#141416] p-3 ${stage.hasAutomation ? 'border-t-2 border-t-violet-500' : ''}`}>
                                     <div className="flex min-w-0 items-center gap-2">
                                         <div className={`h-3 w-3 shrink-0 rounded-full ${stage.color}`} />
                                         {isEditMode ? (
@@ -539,19 +620,19 @@ export const Pipeline: React.FC = () => {
                                                 type="text"
                                                 value={stage.name}
                                                 onChange={(e) => handleStageNameChange(stage.id, e.target.value)}
-                                                className="w-full rounded border border-slate-300 bg-slate-50 px-2 py-1 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-lime-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                                className="w-full rounded border border-zinc-700 bg-[#0B0C0E] px-2 py-1 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                                             />
                                         ) : (
                                             <>
-                                                <h3 className="truncate text-sm font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">{stage.name}</h3>
-                                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-500 dark:bg-slate-800 dark:text-slate-400">{stageDeals.length}</span>
+                                                <h3 className="truncate text-sm font-semibold uppercase tracking-wide text-white">{stage.name}</h3>
+                                                <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-400">{stageDeals.length}</span>
                                             </>
                                         )}
                                     </div>
 
                                     {isEditMode ? (
                                         <div className="flex items-center gap-1">
-                                            <button onClick={() => toggleAutomation(stage.id)} className={`rounded p-1.5 ${stage.hasAutomation ? 'bg-lime-50 text-lime-600 dark:bg-lime-900/20' : 'text-slate-400'}`} title="Toggle Automation Trigger">
+                                            <button onClick={() => toggleAutomation(stage.id)} className={`rounded p-1.5 ${stage.hasAutomation ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20' : 'text-slate-400'}`} title="Toggle Automation Trigger">
                                                 <Zap className="h-4 w-4" />
                                             </button>
                                             <button onClick={() => handleDeleteStage(stage.id)} className="rounded p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete Stage">
@@ -559,32 +640,32 @@ export const Pipeline: React.FC = () => {
                                             </button>
                                         </div>
                                     ) : (
-                                        stage.hasAutomation && <Zap className="h-4 w-4 text-lime-500" />
+                                        stage.hasAutomation && <Zap className="h-4 w-4 text-violet-500" />
                                     )}
                                 </div>
 
                                 <div className="space-y-3 p-3">
                                     {stageDeals.length === 0 ? (
-                                        <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">No deals in this stage.</div>
+                                        <div className="rounded-lg border border-dashed border-zinc-800 p-4 text-sm text-zinc-500">No deals in this stage.</div>
                                     ) : (
                                         stageDeals.map((deal) => {
                                             const contact = getContact(deal.contactId);
                                             return (
-                                                <div key={deal.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                                <div key={deal.id} className="rounded-lg border border-white/[0.08] bg-[#141416] p-4 shadow-sm">
                                                     <div className="mb-2 flex items-start justify-between gap-3">
                                                         <div>
-                                                            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{deal.title}</p>
-                                                            <h4 className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{contact?.firstName} {contact?.lastName}</h4>
+                                                            <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">{deal.title}</p>
+                                                            <h4 className="mt-1 font-semibold text-white">{contact?.firstName} {contact?.lastName}</h4>
                                                         </div>
-                                                        <span className="text-sm font-medium text-slate-900 dark:text-slate-200">${deal.value.toLocaleString()}</span>
+                                                        <span className="text-sm font-medium text-zinc-200">${deal.value.toLocaleString()}</span>
                                                     </div>
-                                                    <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{contact?.company || 'Direct Lead'}</p>
-                                                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                                    <p className="mb-3 text-xs text-zinc-500">{contact?.company || 'Direct Lead'}</p>
+                                                    <label className="block text-[10px] font-bold uppercase tracking-wide text-zinc-500">
                                                         Move stage
                                                         <select
                                                             value={deal.stageId}
                                                             onChange={(e) => void moveDealToStage(deal.id, e.target.value)}
-                                                            className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-lime-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                                            className="mt-1.5 w-full rounded-lg border border-zinc-800 bg-[#0B0C0E] px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                                                         >
                                                             {activeStages.map((optionStage) => (
                                                                 <option key={optionStage.id} value={optionStage.id}>{optionStage.name}</option>
@@ -608,13 +689,13 @@ export const Pipeline: React.FC = () => {
                                 placeholder="Stage Name..."
                                 value={newStageName}
                                 onChange={(e) => setNewStageName(e.target.value)}
-                                className="mb-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                className="mb-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddStage()}
                             />
                             <button
                                 onClick={handleAddStage}
                                 disabled={!newStageName.trim()}
-                                className="w-full rounded-lg bg-slate-200 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-lime-600 hover:text-white disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-lime-600"
+                                className="w-full rounded-lg bg-slate-200 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-violet-600 hover:text-white disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-violet-600"
                             >
                                 Create Stage
                             </button>
@@ -634,12 +715,12 @@ export const Pipeline: React.FC = () => {
                     {activeStages.map(stage => (
                         <div
                             key={stage.id}
-                            className="w-80 flex flex-col bg-slate-100/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-800 transition-all"
+                            className="w-80 flex flex-col bg-[#111214] rounded-xl border border-white/[0.06] transition-all"
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, stage.id)}
                         >
                             {/* Stage Header */}
-                            <div className={`p-3 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 rounded-t-xl group ${stage.hasAutomation ? 'border-t-2 border-t-lime-500' : ''}`}>
+                            <div className={`p-3 border-b border-white/[0.06] flex justify-between items-center bg-[#141416] rounded-t-xl group ${stage.hasAutomation ? 'border-t-2 border-t-violet-500' : ''}`}>
                                 <div className="flex items-center gap-2 flex-1">
                                     <div className={`w-3 h-3 rounded-full flex-shrink-0 ${stage.color} animate-bounce-sm`}></div>
 
@@ -648,12 +729,12 @@ export const Pipeline: React.FC = () => {
                                             type="text"
                                             value={stage.name}
                                             onChange={(e) => handleStageNameChange(stage.id, e.target.value)}
-                                            className="text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 w-full focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                            className="text-sm font-semibold text-white bg-[#0B0C0E] border border-zinc-700 rounded px-2 py-1 w-full focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                         />
                                     ) : (
                                         <div className="flex items-center gap-2">
-                                            <h3 className="font-semibold text-slate-700 dark:text-slate-200 text-sm uppercase tracking-wide truncate max-w-[150px]">{stage.name}</h3>
-                                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs px-2 py-0.5 rounded-full font-mono transition-transform hover:scale-110">
+                                            <h3 className="font-semibold text-white text-sm uppercase tracking-wide truncate max-w-[150px]">{stage.name}</h3>
+                                            <span className="bg-zinc-800 text-zinc-400 text-xs px-2 py-0.5 rounded-full font-mono transition-transform hover:scale-110">
                                                 {activeDeals.filter(d => d.stageId === stage.id).length}
                                             </span>
                                         </div>
@@ -664,7 +745,7 @@ export const Pipeline: React.FC = () => {
                                     <div className="flex items-center gap-1">
                                         <button
                                             onClick={() => toggleAutomation(stage.id)}
-                                            className={`p-1.5 rounded transition-colors ${stage.hasAutomation ? 'text-lime-600 bg-lime-50 dark:bg-lime-900/20' : 'text-slate-300 hover:text-slate-500'}`}
+                                            className={`p-1.5 rounded transition-colors ${stage.hasAutomation ? 'text-violet-600 bg-violet-50 dark:bg-violet-900/20' : 'text-slate-300 hover:text-slate-500'}`}
                                             title="Toggle Automation Trigger"
                                         >
                                             <Zap className="w-4 h-4" />
@@ -679,7 +760,7 @@ export const Pipeline: React.FC = () => {
                                     </div>
                                 ) : (
                                     stage.hasAutomation && (
-                                        <div className="text-lime-500" title="Triggers Automation">
+                                        <div className="text-violet-500" title="Triggers Automation">
                                             <Zap className="w-3.5 h-3.5 fill-current" />
                                         </div>
                                     )
@@ -696,19 +777,19 @@ export const Pipeline: React.FC = () => {
                                             draggable={!isEditMode}
                                             onDragStart={(e) => handleDragStart(e, deal.id)}
                                             onDragEnd={handleDragEnd}
-                                            className={`deal-card bg-white dark:bg-slate-900 p-3 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 transition-all group duration-200
-                        ${isEditMode ? 'opacity-70 pointer-events-none' : 'hover:shadow-lg hover:-translate-y-1 cursor-grab active:cursor-grabbing hover:border-lime-500 dark:hover:border-lime-500'}`}
+                                            className={`deal-card bg-[#141416] p-3 rounded-lg shadow-sm border border-white/[0.08] transition-all group duration-200
+                        ${isEditMode ? 'opacity-70 pointer-events-none' : 'hover:shadow-lg hover:-translate-y-1 cursor-grab active:cursor-grabbing hover:border-violet-500'}`}
                                         >
                                             <div className="flex justify-between items-start mb-2">
-                                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{deal.title}</span>
-                                                {!isEditMode && <GripVertical className="w-4 h-4 text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{deal.title}</span>
+                                                {!isEditMode && <GripVertical className="w-4 h-4 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />}
                                             </div>
-                                            <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-1">{contact?.firstName} {contact?.lastName}</h4>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">{contact?.company || 'Direct Lead'}</p>
+                                            <h4 className="font-semibold text-white mb-1">{contact?.firstName} {contact?.lastName}</h4>
+                                            <p className="text-xs text-zinc-500 mb-3">{contact?.company || 'Direct Lead'}</p>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-sm font-medium text-slate-900 dark:text-slate-200">${deal.value.toLocaleString()}</span>
+                                                <span className="text-sm font-medium text-zinc-200">${deal.value.toLocaleString()}</span>
                                                 <div className="flex -space-x-2">
-                                                    <div className="w-6 h-6 rounded-full bg-lime-100 dark:bg-lime-900/30 border border-white dark:border-slate-800 flex items-center justify-center text-[10px] text-lime-700 dark:text-lime-400">
+                                                    <div className="w-6 h-6 rounded-full bg-violet-500/20 border border-zinc-800 flex items-center justify-center text-[10px] text-violet-300">
                                                         {contact?.firstName?.[0]}
                                                     </div>
                                                 </div>
@@ -729,13 +810,13 @@ export const Pipeline: React.FC = () => {
                                 placeholder="Stage Name..."
                                 value={newStageName}
                                 onChange={(e) => setNewStageName(e.target.value)}
-                                className="w-full mb-3 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                className="w-full mb-3 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddStage()}
                             />
                             <button
                                 onClick={handleAddStage}
                                 disabled={!newStageName.trim()}
-                                className="w-full py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-lime-600 hover:text-white dark:hover:bg-lime-600 dark:hover:text-white transition-colors disabled:opacity-50 disabled:hover:bg-slate-200 disabled:hover:text-slate-700 active:scale-95"
+                                className="w-full py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600 dark:hover:text-white transition-colors disabled:opacity-50 disabled:hover:bg-slate-200 disabled:hover:text-slate-700 active:scale-95"
                             >
                                 Create Stage
                             </button>
@@ -754,7 +835,7 @@ export const Pipeline: React.FC = () => {
                     <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden modal-content animate-pop-in">
                         <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                             <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                <DollarSign className="w-4 h-4 text-lime-600" /> New Deal
+                                <DollarSign className="w-4 h-4 text-violet-600" /> New Deal
                             </h3>
                             <button onClick={() => setIsAddDealModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                                 <X className="w-5 h-5" />
@@ -769,7 +850,7 @@ export const Pipeline: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setIsEditingTemplates(!isEditingTemplates)}
-                                        className="text-xs text-lime-600 hover:text-lime-700 font-medium transition-colors"
+                                        className="text-xs text-violet-600 hover:text-violet-700 font-medium transition-colors"
                                     >
                                         {isEditingTemplates ? 'Done' : 'Manage'}
                                     </button>
@@ -783,14 +864,14 @@ export const Pipeline: React.FC = () => {
                                                     type="text"
                                                     value={t.name}
                                                     onChange={(e) => updateDealTemplate(t.id, { name: e.target.value })}
-                                                    className="flex-1 p-1.5 text-xs border rounded dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:outline-none focus:border-lime-500"
+                                                    className="flex-1 p-1.5 text-xs border rounded dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:outline-none focus:border-violet-500"
                                                     placeholder="Title"
                                                 />
                                                 <input
                                                     type="number"
                                                     value={t.value}
                                                     onChange={(e) => updateDealTemplate(t.id, { value: parseFloat(e.target.value) || 0 })}
-                                                    className="w-16 p-1.5 text-xs border rounded dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:outline-none focus:border-lime-500"
+                                                    className="w-16 p-1.5 text-xs border rounded dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:outline-none focus:border-violet-500"
                                                     placeholder="Value"
                                                 />
                                                 <button
@@ -805,7 +886,7 @@ export const Pipeline: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => createDealTemplate({ name: '', value: 0 })}
-                                            className="w-full py-1.5 text-xs border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:text-lime-600 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                            className="w-full py-1.5 text-xs border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:text-violet-600 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                         >
                                             + Add Template
                                         </button>
@@ -817,10 +898,10 @@ export const Pipeline: React.FC = () => {
                                                 key={t.id}
                                                 type="button"
                                                 onClick={() => setNewDeal(prev => ({ ...prev, title: t.name, value: t.value }))}
-                                                className="text-left px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs hover:border-lime-500 dark:hover:border-lime-500 hover:bg-lime-50 dark:hover:bg-lime-900/10 transition-colors group"
+                                                className="text-left px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs hover:border-violet-500 dark:hover:border-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/10 transition-colors group"
                                             >
-                                                <div className="font-semibold text-slate-700 dark:text-slate-200 group-hover:text-lime-700 dark:group-hover:text-lime-400 truncate">{t.name || 'Untitled'}</div>
-                                                <div className="text-slate-500 dark:text-slate-400 group-hover:text-lime-600/70 dark:group-hover:text-lime-400/70">${t.value}</div>
+                                                <div className="font-semibold text-slate-700 dark:text-slate-200 group-hover:text-violet-700 dark:group-hover:text-violet-400 truncate">{t.name || 'Untitled'}</div>
+                                                <div className="text-slate-500 dark:text-slate-400 group-hover:text-violet-600/70 dark:group-hover:text-violet-400/70">${t.value}</div>
                                             </button>
                                         ))}
                                     </div>
@@ -837,7 +918,7 @@ export const Pipeline: React.FC = () => {
                                     placeholder="e.g. Roof Replacement"
                                     value={newDeal.title}
                                     onChange={e => setNewDeal({ ...newDeal, title: e.target.value })}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 />
                             </div>
 
@@ -848,7 +929,7 @@ export const Pipeline: React.FC = () => {
                                     placeholder="0.00"
                                     value={newDeal.value}
                                     onChange={e => setNewDeal({ ...newDeal, value: e.target.value })}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 />
                             </div>
 
@@ -858,7 +939,7 @@ export const Pipeline: React.FC = () => {
                                     required
                                     value={newDeal.contactId}
                                     onChange={e => setNewDeal({ ...newDeal, contactId: e.target.value })}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 >
                                     <option value="">Select a contact...</option>
                                     {contacts.map(contact => (
@@ -875,7 +956,7 @@ export const Pipeline: React.FC = () => {
                                     required
                                     value={newDeal.stageId}
                                     onChange={e => setNewDeal({ ...newDeal, stageId: e.target.value })}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 >
                                     <option value="">Select a stage...</option>
                                     {activeStages.map(stage => (
@@ -896,7 +977,7 @@ export const Pipeline: React.FC = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 py-2.5 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 transition-colors shadow-sm active:scale-95"
+                                    className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95"
                                 >
                                     Add Deal
                                 </button>
@@ -912,7 +993,7 @@ export const Pipeline: React.FC = () => {
                     <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden modal-content flex flex-col max-h-[90vh] animate-pop-in">
                         <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                             <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                <Layout className="w-4 h-4 text-lime-600" /> Create New Pipeline
+                                <Layout className="w-4 h-4 text-violet-600" /> Create New Pipeline
                             </h3>
                             <button onClick={() => setIsCreatePipelineModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                                 <X className="w-5 h-5" />
@@ -930,10 +1011,10 @@ export const Pipeline: React.FC = () => {
                                             <button
                                                 key={template.id}
                                                 onClick={() => setSelectedTemplateId(template.id)}
-                                                className={`w-full text-left p-3 rounded-lg border transition-all active:scale-95 ${selectedTemplateId === template.id ? 'bg-white dark:bg-slate-800 border-lime-500 ring-1 ring-lime-500 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-lime-300 dark:hover:border-lime-700'}`}
+                                                className={`w-full text-left p-3 rounded-lg border transition-all active:scale-95 ${selectedTemplateId === template.id ? 'bg-white dark:bg-slate-800 border-violet-500 ring-1 ring-violet-500 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-violet-300 dark:hover:border-violet-700'}`}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <Icon className={`w-4 h-4 ${selectedTemplateId === template.id ? 'text-lime-600' : 'text-slate-400'}`} />
+                                                    <Icon className={`w-4 h-4 ${selectedTemplateId === template.id ? 'text-violet-600' : 'text-slate-400'}`} />
                                                     <span className={`text-sm font-bold ${selectedTemplateId === template.id ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>{template.label}</span>
                                                 </div>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{template.description}</p>
@@ -954,7 +1035,7 @@ export const Pipeline: React.FC = () => {
                                             placeholder={PIPELINE_TEMPLATES.find(t => t.id === selectedTemplateId)?.label || 'My Pipeline'}
                                             value={customPipelineName}
                                             onChange={(e) => setCustomPipelineName(e.target.value)}
-                                            className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none transition-shadow"
+                                            className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none transition-shadow"
                                         />
                                     </div>
 
@@ -966,7 +1047,7 @@ export const Pipeline: React.FC = () => {
                                                     <div className={`w-3 h-3 rounded-full ${stage.color}`}></div>
                                                     <span className="text-sm font-medium text-slate-700 dark:text-slate-200 flex-1">{stage.name}</span>
                                                     {stage.hasAutomation && (
-                                                        <div className="flex items-center gap-1 text-[10px] font-bold text-lime-600 bg-lime-50 dark:bg-lime-900/20 px-2 py-0.5 rounded">
+                                                        <div className="flex items-center gap-1 text-[10px] font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded">
                                                             <Zap className="w-3 h-3" /> Automation
                                                         </div>
                                                     )}
@@ -989,7 +1070,7 @@ export const Pipeline: React.FC = () => {
                             <button
                                 type="submit"
                                 form="create-pipeline-form"
-                                className="px-4 py-2 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 transition-colors shadow-sm active:scale-95"
+                                className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95"
                             >
                                 Create Pipeline
                             </button>

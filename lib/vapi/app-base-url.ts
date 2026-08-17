@@ -1,9 +1,10 @@
 import type { NextRequest } from 'next/server';
 
 /**
- * Public origin for server-side code that must build absolute URLs (e.g. Vapi MCP tool `server.url`).
- * Set `APP_BASE_URL` in production (e.g. `https://your-app.vercel.app`).
- * Falls back to `NEXT_PUBLIC_APP_URL`, Vercel production URL, `VERCEL_URL`, then the incoming request origin.
+ * Public origin for Vapi webhook/tool URLs.
+ * Localhost is never returned — Vapi cannot reach it.
+ * Prefer `NEXT_PUBLIC_APP_URL` / `VAPI_PUBLIC_BASE_URL`, then a non-local `APP_BASE_URL`,
+ * then Vercel production URL, then the incoming request origin.
  */
 function isLocalhostUrl(value: string): boolean {
   return /localhost|127\.0\.0\.1/i.test(value);
@@ -12,6 +13,9 @@ function isLocalhostUrl(value: string): boolean {
 function normalizeOrigin(origin: string): string | null {
   const cleaned = origin.trim().replace(/\/$/, '');
   if (!cleaned || isLocalhostUrl(cleaned)) return null;
+  if (!/^https?:\/\//i.test(cleaned)) {
+    return `https://${cleaned}`;
+  }
   return cleaned;
 }
 
@@ -33,47 +37,34 @@ function originFromRequest(request: Pick<NextRequest, 'headers' | 'url'>): strin
 }
 
 export function getAppBaseUrl(): string | null {
-  const explicit =
-    process.env.APP_BASE_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (explicit) {
-    const cleaned = explicit.replace(/\/$/, '');
-    if (!isLocalhostUrl(cleaned)) {
-      return cleaned;
-    }
+  const candidates = [
+    process.env.VAPI_PUBLIC_BASE_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.APP_BASE_URL,
+  ];
+
+  for (const raw of candidates) {
+    const normalized = normalizeOrigin(raw ?? '');
+    if (normalized) return normalized;
   }
 
   const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (productionUrl) {
-    const host = productionUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    return `https://${host}`;
+    return normalizeOrigin(productionUrl);
   }
 
   const vercel = process.env.VERCEL_URL?.trim();
   if (vercel) {
-    const host = vercel.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    return `https://${host}`;
-  }
-
-  if (explicit) {
-    return explicit.replace(/\/$/, '');
+    return normalizeOrigin(vercel);
   }
 
   return null;
 }
 
-/** Prefer env config, then the public origin of the current HTTP request (e.g. Vercel production URL on Sync). */
+/** Prefer a public env URL, then the public origin of the current HTTP request. Never localhost. */
 export function resolveAppBaseUrl(request?: Pick<NextRequest, 'headers' | 'url'>): string | null {
   const fromEnv = getAppBaseUrl();
-  if (fromEnv && !isLocalhostUrl(fromEnv)) {
-    return fromEnv;
-  }
-
-  if (request) {
-    const fromRequest = originFromRequest(request);
-    if (fromRequest) {
-      return fromRequest;
-    }
-  }
-
-  return fromEnv;
+  if (fromEnv) return fromEnv;
+  if (request) return originFromRequest(request);
+  return null;
 }

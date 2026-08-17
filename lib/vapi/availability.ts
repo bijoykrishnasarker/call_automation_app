@@ -16,6 +16,8 @@ export interface AvailabilityResult {
   message: string;
   requestedSlot: SuggestedSlot;
   suggestedSlots: SuggestedSlot[];
+  today: string;
+  timezone: string;
 }
 
 function overlaps(startA: number, endA: number, startB: number, endB: number): boolean {
@@ -69,6 +71,9 @@ export function buildAvailabilityResult(params: {
     display: formatSlotForCaller(requestedStart.toISOString(), timezone),
   };
 
+  const todayParts = getZonedParts(Date.now(), timezone);
+  const today = `${String(todayParts.year).padStart(4, '0')}-${String(todayParts.month).padStart(2, '0')}-${String(todayParts.day).padStart(2, '0')}`;
+
   const taken = busy.some(interval => overlaps(startMs, endMs, interval.start, interval.end));
   if (!taken) {
     return {
@@ -76,6 +81,8 @@ export function buildAvailabilityResult(params: {
       message: `${requestedSlot.display} is free. You can book this time.`,
       requestedSlot,
       suggestedSlots: [requestedSlot],
+      today,
+      timezone,
     };
   }
 
@@ -105,5 +112,7 @@ export function buildAvailabilityResult(params: {
       : `${requestedSlot.display} is already booked. Ask the caller for a different day or time.`,
     requestedSlot,
     suggestedSlots,
+    today,
+    timezone,
   };
 }

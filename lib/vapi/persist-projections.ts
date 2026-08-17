@@ -342,18 +342,33 @@ export async function checkAvailability(params: {
   const end = parsedEnd ?? new Date(start.getTime() + Math.max(1, durationMinutes) * 60 * 1000);
 
   const windowEnd = new Date(start.getTime() + suggestionWindowDays * 24 * 60 * 60 * 1000).toISOString();
-  const { data: bookings, error } = await supabase
-    .from('bookings')
-    .select('start_at, end_at')
-    .eq('user_id', userId)
-    .lt('start_at', windowEnd)
-    .gt('end_at', start.toISOString());
+  const windowStart = start.toISOString();
+  const [{ data: bookings, error }, { data: extraAppointments }] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select('start_at, end_at')
+      .eq('user_id', userId)
+      .lt('start_at', windowEnd)
+      .gt('end_at', windowStart),
+    supabase
+      .from('appointments')
+      .select('start_time_utc, end_time_utc')
+      .eq('owner_user_id', userId)
+      .lt('start_time_utc', windowEnd)
+      .gt('end_time_utc', windowStart),
+  ]);
 
   if (error) throw error;
-  const busy = (bookings ?? []).map((booking: { start_at: string; end_at: string }) => ({
-    start: new Date(booking.start_at).getTime(),
-    end: new Date(booking.end_at).getTime(),
-  }));
+  const busy = [
+    ...(bookings ?? []).map((booking: { start_at: string; end_at: string }) => ({
+      start: new Date(booking.start_at).getTime(),
+      end: new Date(booking.end_at).getTime(),
+    })),
+    ...(extraAppointments ?? []).map((row: { start_time_utc: string; end_time_utc: string }) => ({
+      start: new Date(row.start_time_utc).getTime(),
+      end: new Date(row.end_time_utc).getTime(),
+    })),
+  ];
 
   return buildAvailabilityResult({
     requestedStart: start,
@@ -725,10 +740,9 @@ export async function persistEnvelope(params: {
   }
 
   let appointmentResult: { appointmentId: string; bookingId: string | null; decision: ProjectionDecision } | null = null;
-  const bookedViaTool = envelope.tool_calls.some(toolCall => toolCall.name === 'book_appointment');
   const isEndOfCallReport = envelope.provider_event_type === 'end-of-call-report';
 
-  if (envelope.appointment && contactResult && !bookedViaTool && envelope.provider_event_type !== 'tool-calls') {
+  if (envelope.appointment && contactResult && envelope.provider_event_type !== 'tool-calls') {
     if (isEndOfCallReport) {
       const { data: receptionistSettings } = await supabase
         .from('ai_receptionists')

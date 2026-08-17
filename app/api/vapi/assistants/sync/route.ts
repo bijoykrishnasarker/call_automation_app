@@ -3,6 +3,8 @@ import { createSupabaseClientForUser } from '@/lib/supabase/server';
 import { getOrganizationIdForUser } from '@/lib/auth/get-organization-id';
 import { vapi } from '@/lib/vapi/client';
 import { AI_RECEPTIONIST_SELECT_COLUMNS, type AiReceptionistSettingsRow } from '@/lib/ai-receptionist/types';
+import { resolveAppBaseUrl } from '@/lib/vapi/app-base-url';
+import { buildBookingWebhookTools, buildVapiWebhookServer } from '@/lib/vapi/booking-webhook-tools';
 
 const GENERIC_ERROR_MESSAGE = 'An unexpected error occurred. Please try again.';
 
@@ -67,8 +69,12 @@ function buildSystemPrompt(settings: {
   }
 
   if (settings.can_book_appointments) {
+    const today = new Date();
+    const todayYear = today.getFullYear();
+    const todayIso = today.toISOString().slice(0, 10);
     parts.push(
       `# Appointment booking workflow\n` +
+        `Today's date is ${todayIso}. Current year is ${todayYear}. If the caller omits the year, use ${todayYear}. Never send 2023/2024/2025 unless they asked for that year.\n` +
         `When the caller asks to book an appointment (or mentions a preferred date/time), do this:\n` +
         `1) Collect name, phone, and email, plus the requested date and time.\n` +
         `2) Call \`check_availability\` with timezone "Asia/Dhaka" unless the caller said another timezone.\n` +
@@ -170,6 +176,25 @@ export async function POST(request: NextRequest) {
     }
 
     let vapiAssistantId: string;
+    const appBaseUrl = resolveAppBaseUrl(request);
+    const tools = appBaseUrl
+      ? buildBookingWebhookTools(appBaseUrl, {
+          bookAppointments: receptionistSettings.can_book_appointments !== false,
+          takeMessages: receptionistSettings.can_take_messages !== false,
+        })
+      : [];
+    const webhookServer = appBaseUrl ? buildVapiWebhookServer(appBaseUrl) : null;
+    const modelPayload = {
+      provider: 'openai' as const,
+      model: 'gpt-4o-mini' as const,
+      messages: [
+        {
+          role: 'system' as const,
+          content: buildSystemPrompt(receptionistSettings),
+        },
+      ],
+      tools,
+    };
 
     if (existingAssistant?.vapi_assistant_id) {
       // Update existing assistant in Vapi. SDK expects a single object with id and fields.
@@ -177,20 +202,12 @@ export async function POST(request: NextRequest) {
         id: existingAssistant.vapi_assistant_id,
         name: receptionistSettings.agent_name,
         firstMessage: 'Hi, this is your AI receptionist. How can I help you today?',
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: buildSystemPrompt(receptionistSettings),
-            },
-          ],
-        },
+        model: modelPayload,
         voice: {
           provider: 'vapi',
           voiceId: voiceId as Parameters<typeof vapi.assistants.update>[0]['voice'] extends { voiceId: infer V } ? V : never,
         },
+        ...(webhookServer ? { server: webhookServer } : {}),
       });
 
       vapiAssistantId = updated.id;
@@ -199,20 +216,12 @@ export async function POST(request: NextRequest) {
       const created = await vapi.assistants.create({
         name: receptionistSettings.agent_name,
         firstMessage: 'Hi, this is your AI receptionist. How can I help you today?',
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: buildSystemPrompt(receptionistSettings),
-            },
-          ],
-        },
+        model: modelPayload,
         voice: {
           provider: 'vapi',
           voiceId: voiceId as Parameters<typeof vapi.assistants.create>[0]['voice'] extends { voiceId: infer V } ? V : never,
         },
+        ...(webhookServer ? { server: webhookServer } : {}),
       });
 
       vapiAssistantId = created.id;

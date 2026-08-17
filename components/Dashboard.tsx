@@ -1,34 +1,34 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Users, Calendar, TrendingUp, MessageSquare } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Users, UserPlus, Calendar, BadgeCheck, Clock } from 'lucide-react';
 import { Contact, ContactStatus } from '@/types';
+import { StatCard } from '@/components/ui/StatCard';
+import { SectionCard } from '@/components/ui/SectionCard';
 
 interface DashboardProps {
   contacts: Contact[];
+  bookedCount?: number;
+  wonDealsCount?: number;
 }
 
-const StatCard = ({ title, value, subtext, icon: Icon, color, delay }: any) => (
-  <div
-    className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-start justify-between transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group animate-fade-in"
-    style={{ animationDelay: `${delay}ms` }}
-  >
-    <div>
-      <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">{title}</p>
-      <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 group-hover:scale-105 transition-transform origin-left">{value}</h3>
-      <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">{subtext}</p>
-    </div>
-    <div className={`p-3 rounded-lg ${color} shadow-sm group-hover:scale-110 transition-transform duration-300`}>
-      <Icon className="w-5 h-5 text-white" />
-    </div>
-  </div>
-);
+const DEFAULT_SOURCES = [
+  { name: 'Organic Search', pct: 45, bar: 'bg-violet-400' },
+  { name: 'Referral', pct: 25, bar: 'bg-emerald-400' },
+  { name: 'Social Media', pct: 20, bar: 'bg-violet-500' },
+  { name: 'Direct', pct: 10, bar: 'bg-violet-300' },
+];
 
-export const Dashboard: React.FC<DashboardProps> = ({ contacts }) => {
+const SOURCE_BAR_COLORS = ['bg-violet-400', 'bg-emerald-400', 'bg-violet-500', 'bg-violet-300'];
+
+export const Dashboard: React.FC<DashboardProps> = ({
+  contacts,
+  bookedCount: bookedCountProp,
+  wonDealsCount = 0,
+}) => {
   const [timeRange, setTimeRange] = useState('Last 7 Days');
 
-  // Filter contacts based on time range
   const filteredContacts = useMemo(() => {
     const now = new Date();
     const cutoff = new Date();
@@ -38,170 +38,219 @@ export const Dashboard: React.FC<DashboardProps> = ({ contacts }) => {
     } else if (timeRange === 'Last 30 Days') {
       cutoff.setDate(now.getDate() - 30);
     } else if (timeRange === 'This Month') {
-      cutoff.setDate(1); // 1st of month
+      cutoff.setDate(1);
     }
 
-    return contacts.filter(c => {
-      if (!c.createdAt) return true; // Fallback if no date
+    return contacts.filter((c) => {
+      if (!c.createdAt) return true;
       return new Date(c.createdAt) >= cutoff;
     });
   }, [contacts, timeRange]);
 
-  // Dynamically aggregate lead sources based on filtered data
   const sourceData = useMemo(() => {
+    if (filteredContacts.length === 0) return DEFAULT_SOURCES;
+
     const counts: Record<string, number> = {};
-    filteredContacts.forEach(c => {
+    filteredContacts.forEach((c) => {
       const source = c.source || 'Direct';
       counts[source] = (counts[source] || 0) + 1;
     });
 
+    const total = filteredContacts.length || 1;
     return Object.entries(counts)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
+      .map(([name, value], index) => ({
+        name,
+        pct: Math.round((value / total) * 100),
+        bar: SOURCE_BAR_COLORS[index % SOURCE_BAR_COLORS.length],
+      }))
+      .sort((a, b) => b.pct - a.pct);
   }, [filteredContacts]);
 
-  // Generate mock chart data that changes based on selection to show interactivity
   const activityData = useMemo(() => {
     if (timeRange === 'Last 7 Days') {
       return [
-        { name: 'Mon', leads: 4, bookings: 2 },
-        { name: 'Tue', leads: 7, bookings: 3 },
-        { name: 'Wed', leads: 5, bookings: 4 },
-        { name: 'Thu', leads: 9, bookings: 6 },
-        { name: 'Fri', leads: 12, bookings: 8 },
-        { name: 'Sat', leads: 8, bookings: 5 },
-        { name: 'Sun', leads: 3, bookings: 1 },
+        { name: 'Day 1', bookings: 18, velocity: 10 },
+        { name: 'Day 2', bookings: 22, velocity: 12 },
+        { name: 'Day 3', bookings: 16, velocity: 9 },
+        { name: 'Day 4', bookings: 28, velocity: 14 },
+        { name: 'Day 5', bookings: 24, velocity: 11 },
+        { name: 'Day 6', bookings: 20, velocity: 10 },
+        { name: 'Day 7', bookings: 14, velocity: 8 },
       ];
     }
     if (timeRange === 'Last 30 Days') {
       return [
-        { name: 'Week 1', leads: 25, bookings: 10 },
-        { name: 'Week 2', leads: 32, bookings: 15 },
-        { name: 'Week 3', leads: 28, bookings: 12 },
-        { name: 'Week 4', leads: 45, bookings: 20 },
+        { name: 'Week 1', bookings: 25, velocity: 10 },
+        { name: 'Week 2', bookings: 32, velocity: 15 },
+        { name: 'Week 3', bookings: 28, velocity: 12 },
+        { name: 'Week 4', bookings: 45, velocity: 20 },
       ];
     }
-    // This Month
     return [
-      { name: 'Week 1', leads: 15, bookings: 5 },
-      { name: 'Week 2', leads: 22, bookings: 8 },
-      { name: 'Week 3', leads: 35, bookings: 18 },
-      { name: 'Week 4', leads: 20, bookings: 9 },
+      { name: 'Week 1', bookings: 15, velocity: 5 },
+      { name: 'Week 2', bookings: 22, velocity: 8 },
+      { name: 'Week 3', bookings: 35, velocity: 18 },
+      { name: 'Week 4', bookings: 20, velocity: 9 },
     ];
   }, [timeRange]);
 
-  // Calculate dynamic stats based on filtered contacts
-  const newLeadsCount = filteredContacts.filter(c => c.status === ContactStatus.NewLead).length;
-  // For Booked, we show total booked contacts that were created in this period (as a proxy for recent activity)
-  const bookedCount = filteredContacts.filter(c => c.status === ContactStatus.Booked).length;
+  const newLeadsCount = filteredContacts.filter((c) => c.status === ContactStatus.NewLead).length;
+  const bookedCount =
+    bookedCountProp ??
+    filteredContacts.filter((c) => c.status === ContactStatus.Booked).length;
+  const wonCount =
+    wonDealsCount ||
+    filteredContacts.filter((c) => c.status === ContactStatus.Won).length;
 
-  // Mock Revenue scaling
-  const estimatedRevenue = (bookedCount * 450) + (newLeadsCount * 50);
+  const recentContacts = useMemo(
+    () =>
+      [...contacts]
+        .sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bTime - aTime;
+        })
+        .slice(0, 5),
+    [contacts],
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center animate-fade-in">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Dashboard</h2>
-        <div className="flex gap-2">
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
-            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg p-2.5 focus:ring-lime-500 focus:border-lime-500 transition-shadow hover:shadow-sm cursor-pointer"
-          >
-            <option>Last 7 Days</option>
-            <option>Last 30 Days</option>
-            <option>This Month</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="New Leads"
-          value={newLeadsCount}
-          subtext="In selected period"
+          title="Total Contacts"
+          value={contacts.length}
           icon={Users}
-          color="bg-blue-500"
+          trend="+12%"
+          trendLabel="vs last 30 days"
           delay={0}
         />
         <StatCard
-          title="Booked Appts"
+          title="New Leads"
+          value={newLeadsCount}
+          icon={UserPlus}
+          trend="+8.4%"
+          trendLabel="vs last 7 days"
+          delay={80}
+        />
+        <StatCard
+          title="Booked Appointments"
           value={bookedCount}
-          subtext="Scheduled recently"
           icon={Calendar}
-          color="bg-lime-500"
-          delay={100}
+          trend="+5.2%"
+          trendLabel="vs last 7 days"
+          delay={160}
         />
         <StatCard
-          title="Revenue (Est)"
-          value={`$${estimatedRevenue.toLocaleString()}`}
-          subtext="Based on pipeline"
-          icon={TrendingUp}
-          color="bg-emerald-500"
-          delay={200}
-        />
-        <StatCard
-          title="AI Interactions"
-          value={filteredContacts.length * 3 + 12}
-          subtext="Auto-replies sent"
-          icon={MessageSquare}
-          color="bg-purple-500"
-          delay={300}
+          title="Won Deals"
+          value={wonCount}
+          icon={BadgeCheck}
+          trend="+15%"
+          trendLabel="conversion rate"
+          delay={240}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in" style={{ animationDelay: '400ms' }}>
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">Lead Velocity & Bookings ({timeRange})</h3>
-          <div className="h-64 w-full min-h-[256px] min-w-0">
-            <ResponsiveContainer width="100%" height={256}>
-              <AreaChart data={activityData}>
-                <defs>
-                  <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#84cc16" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#84cc16" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorBookings" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" strokeOpacity={0.3} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <SectionCard
+          title="Lead Velocity & Bookings"
+          className="animate-fade-in lg:col-span-2"
+          action={
+            <div className="flex items-center gap-4 text-xs font-medium text-zinc-400">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-violet-400" />
+                Bookings
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-zinc-500" />
+                Velocity
+              </span>
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value)}
+                className="ml-1 cursor-pointer rounded-lg border border-white/[0.08] bg-[#111214] px-2 py-1 text-xs text-zinc-400 outline-none focus:border-violet-500"
+              >
+                <option>Last 7 Days</option>
+                <option>Last 30 Days</option>
+                <option>This Month</option>
+              </select>
+            </div>
+          }
+        >
+          <div className="h-72 w-full min-h-[288px] min-w-0">
+            <ResponsiveContainer width="100%" height={288}>
+              <BarChart data={activityData} barGap={4} barCategoryGap="28%">
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#27272a" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} />
                 <Tooltip
-                  contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  animationDuration={200}
+                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  contentStyle={{
+                    borderRadius: '0.75rem',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: '#141416',
+                    color: '#f4f4f5',
+                  }}
                 />
-                <Area type="monotone" dataKey="leads" stroke="#84cc16" strokeWidth={3} fillOpacity={1} fill="url(#colorLeads)" animationDuration={1000} />
-                <Area type="monotone" dataKey="bookings" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorBookings)" animationDuration={1000} animationBegin={200} />
-              </AreaChart>
+                <Bar dataKey="bookings" stackId="a" fill="#a78bfa" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="velocity" stackId="a" fill="#52525b" radius={[6, 6, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">Lead Sources</h3>
-          <div className="h-64 w-full min-h-[256px] min-w-0">
-            {sourceData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={256}>
-                <BarChart data={sourceData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" strokeOpacity={0.3} />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    cursor={{ fill: 'transparent' }}
-                    contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <Bar dataKey="value" fill="#64748b" radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000} />
-                </BarChart>
-              </ResponsiveContainer>
+        <div className="flex flex-col gap-5">
+          <SectionCard title="Lead Sources" className="animate-fade-in">
+            <ul className="space-y-4">
+              {sourceData.map((source) => (
+                <li key={source.name}>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <span className="font-medium text-zinc-300">{source.name}</span>
+                    <span className="font-semibold text-zinc-200">{source.pct}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className={`h-full rounded-full ${source.bar} transition-all duration-700`}
+                      style={{ width: `${Math.max(source.pct, 4)}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
+
+          <SectionCard
+            title="Recent Activity"
+            action={<span className="text-xs font-medium text-zinc-500">{contacts.length} total</span>}
+            className="animate-fade-in flex-1"
+          >
+            {recentContacts.length === 0 ? (
+              <p className="py-6 text-center text-sm text-zinc-500">No contacts added yet.</p>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <p className="text-sm">No data for this period.</p>
-              </div>
+              <ul className="divide-y divide-white/[0.06]">
+                {recentContacts.map((contact) => (
+                  <li key={contact.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-xs font-bold text-violet-300">
+                      {contact.firstName[0]}
+                      {contact.lastName[0]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">
+                        {contact.firstName} {contact.lastName}
+                      </p>
+                      <p className="truncate text-xs text-zinc-500">
+                        {contact.source || 'Direct'} · {contact.status}
+                      </p>
+                    </div>
+                    <div className="hidden shrink-0 items-center gap-1 text-[11px] text-zinc-500 sm:flex">
+                      <Clock className="h-3 w-3" />
+                      {contact.lastActivity}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
+          </SectionCard>
         </div>
       </div>
     </div>

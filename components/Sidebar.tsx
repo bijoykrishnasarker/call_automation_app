@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, Users, KanbanSquare, CalendarDays, GitBranch, Bot, Settings, LogOut, Star, Inbox, Megaphone } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { NavigationItem } from '@/types';
 
 interface SidebarProps {
   className?: string;
@@ -29,7 +28,8 @@ const navItems = [
 export const Sidebar: React.FC<SidebarProps> = ({ className = '', mobile = false, onNavigateComplete }) => {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const displayName = user?.fullName?.trim() || user?.email?.split('@')[0] || 'User';
 
   const handleSignOut = async () => {
     await logout();
@@ -38,17 +38,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', mobile = false
   };
 
   return (
-    <aside className={`flex h-full w-full flex-col bg-white dark:bg-slate-900 ${className}`.trim()}>
-      <div className="flex items-center gap-2 border-b border-slate-200/80 p-5 dark:border-slate-800/80 select-none">
-        <div className="w-8 h-8 bg-lime-500 rounded-lg flex items-center justify-center transform hover:rotate-12 transition-transform duration-300">
-          <Bot className="w-5 h-5 text-white" />
+    <aside className={`flex h-full w-full flex-col bg-[#0B0C0E] ${className}`.trim()}>
+      <div className="select-none px-5 pb-5 pt-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/20 ring-1 ring-violet-500/30">
+            <Bot className="h-5 w-5 text-violet-400" strokeWidth={2} />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-bold tracking-tight text-white">
+              LeadOps<span className="text-violet-400">AI</span>
+            </p>
+            <p className="text-[11px] font-medium text-zinc-500">Enterprise Suite</p>
+          </div>
         </div>
-        <span className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">LeadOps<span className="text-lime-600 dark:text-lime-500">AI</span></span>
       </div>
 
       {mobile && <h2 id="mobile-nav-title" className="sr-only">Navigation</h2>}
 
-      <nav aria-label="Primary" className="surface-scroll flex-1 overflow-y-auto px-3 py-4 space-y-1">
+      <nav aria-label="Primary" className="surface-scroll flex-1 space-y-0.5 overflow-y-auto px-3">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.path;
@@ -58,28 +65,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', mobile = false
               href={item.path}
               aria-current={isActive ? 'page' : undefined}
               onClick={onNavigateComplete}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative
-                ${isActive
-                  ? 'bg-lime-50 dark:bg-lime-900/20 text-lime-700 dark:text-lime-400 shadow-sm translate-x-1'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 hover:translate-x-1 active:scale-95'}`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors duration-150 ${
+                isActive
+                  ? 'bg-violet-500 text-white shadow-sm shadow-violet-500/25'
+                  : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+              }`}
             >
-              <Icon className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'text-lime-600 dark:text-lime-400 scale-110' : 'text-slate-400 dark:text-slate-500 group-hover:scale-110'}`} />
+              <Icon
+                className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-white' : 'text-zinc-500'}`}
+                strokeWidth={isActive ? 2.25 : 2}
+              />
               {item.label}
-              {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-lime-500 rounded-r-full" />}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+      <div className="mt-auto border-t border-white/[0.06] p-3 space-y-2">
         <button
           type="button"
           onClick={handleSignOut}
-          className="flex items-center gap-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 w-full transition-all active:scale-95"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-zinc-400 transition-colors hover:bg-white/[0.04] hover:text-zinc-200"
         >
-          <LogOut className="w-5 h-5" />
+          <LogOut className="h-[18px] w-[18px] text-zinc-500" strokeWidth={2} />
           Sign Out
         </button>
+        <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#141416] px-3 py-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-xs font-bold text-violet-300">
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+            <p className="truncate text-[11px] text-zinc-500">Pro Plan</p>
+          </div>
+        </div>
       </div>
     </aside>
   );

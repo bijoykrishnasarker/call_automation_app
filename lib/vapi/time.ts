@@ -122,6 +122,50 @@ function localDateTimeToUtc(input: {
   return { instant: new Date(chosenMs), ambiguous };
 }
 
+const PAST_YEAR_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Voice agents often invent a past year (2023/2024) when the caller only says
+ * "August 16". Calendar shows the current month, so those bookings look missing.
+ * Keep the wall-clock time and roll the year forward to this year (or next if
+ * that slot is already more than two days in the past).
+ */
+export function snapPastCalendarYearForward(
+  start: Date,
+  timezone: string,
+  now: Date = new Date()
+): { instant: Date; snapped: boolean } {
+  const iana = ensureIanaTimeZone(timezone) ?? DEFAULT_BUSINESS_TIMEZONE;
+  const nowParts = getZonedParts(now.getTime(), iana);
+  const startParts = getZonedParts(start.getTime(), iana);
+
+  if (startParts.year >= nowParts.year) {
+    return { instant: start, snapped: false };
+  }
+
+  const rebuild = (year: number) =>
+    localDateTimeToUtc({
+      timezone: iana,
+      year,
+      month: startParts.month,
+      day: startParts.day,
+      hour: startParts.hour,
+      minute: startParts.minute,
+      second: startParts.second,
+      disambiguation: getDstFallbackMode(),
+    }).instant;
+
+  let instant = rebuild(nowParts.year);
+  if (!instant) return { instant: start, snapped: false };
+
+  if (instant.getTime() < now.getTime() - PAST_YEAR_GRACE_MS) {
+    const nextYear = rebuild(nowParts.year + 1);
+    if (nextYear) instant = nextYear;
+  }
+
+  return { instant, snapped: instant.getTime() !== start.getTime() };
+}
+
 export interface ResolvedAppointmentWindow {
   start_time_utc: string;
   end_time_utc: string;
@@ -132,6 +176,20 @@ export interface ResolvedAppointmentWindow {
   validation_errors: CanonicalValidationIssue[];
 }
 
+function applyYearSnapToWindow(
+  start: Date,
+  end: Date,
+  timezone: string,
+  now: Date,
+  warnings: string[]
+): { start: Date; end: Date } {
+  const snapped = snapPastCalendarYearForward(start, timezone, now);
+  if (!snapped.snapped) return { start, end };
+  const durationMs = Math.max(60_000, end.getTime() - start.getTime());
+  warnings.push('appointment_year_snapped_to_current');
+  return { start: snapped.instant, end: new Date(snapped.instant.getTime() + durationMs) };
+}
+
 export function resolveAppointmentWindow(input: {
   startAt?: string | null;
   endAt?: string | null;
@@ -140,6 +198,7 @@ export function resolveAppointmentWindow(input: {
   timezone?: string | null;
   durationMinutes?: number | null;
   tracePath?: string;
+  now?: Date;
 }): ResolvedAppointmentWindow | null {
   const tracePath = input.tracePath ?? 'appointment';
   const warnings: string[] = [];
@@ -147,7 +206,7 @@ export function resolveAppointmentWindow(input: {
   const timezone = ensureIanaTimeZone(input.timezone ?? '') ?? null;
 
   if (input.startAt) {
-    const start = parseIsoTimestamp(input.startAt);
+    let start = parseIsoTimestamp(input.startAt);
     if (!start) {
       validation_errors.push({
         path: `${tracePath}.startAt`,
@@ -180,6 +239,10 @@ export function resolveAppointmentWindow(input: {
 
     const effectiveTimezone = timezone ?? 'UTC';
     if (!timezone) warnings.push('timezone_missing_falling_back_to_utc');
+
+    const snappedWindow = applyYearSnapToWindow(start, end, effectiveTimezone, input.now ?? new Date(), warnings);
+    start = snappedWindow.start;
+    end = snappedWindow.end;
 
     const localParts = getZonedParts(start.getTime(), effectiveTimezone);
     const duration_minutes = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60_000));
@@ -249,12 +312,17 @@ export function resolveAppointmentWindow(input: {
     warnings.push(`ambiguous_dst_time_resolved_${getDstFallbackMode()}`);
   }
 
-  const end = new Date(conversion.instant.getTime() + duration_minutes * 60_000);
+  let start = conversion.instant;
+  let end = new Date(start.getTime() + duration_minutes * 60_000);
+  const snappedWindow = applyYearSnapToWindow(start, end, timezone, input.now ?? new Date(), warnings);
+  start = snappedWindow.start;
+  end = snappedWindow.end;
+  const localParts = getZonedParts(start.getTime(), timezone);
 
   return {
-    start_time_utc: conversion.instant.toISOString(),
+    start_time_utc: start.toISOString(),
     end_time_utc: end.toISOString(),
-    date: input.localDate,
+    date: `${String(localParts.year).padStart(4, '0')}-${String(localParts.month).padStart(2, '0')}-${String(localParts.day).padStart(2, '0')}`,
     timezone,
     duration_minutes,
     warnings,
@@ -270,28 +338,32 @@ export function inferDefaultTimezone(): string {
 }
 
 /** Parse ISO with offset, or naive local datetime like `2026-08-16T15:00` in `timezone`. */
-export function parseFlexibleDateTime(raw: string, timezone: string): Date | null {
-  const withOffset = parseIsoTimestamp(raw);
-  if (withOffset) return withOffset;
+export function parseFlexibleDateTime(raw: string, timezone: string, now: Date = new Date()): Date | null {
+  const iana = ensureIanaTimeZone(timezone) ?? DEFAULT_BUSINESS_TIMEZONE;
+  let parsed: Date | null = parseIsoTimestamp(raw);
 
-  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(raw.trim());
-  if (!match) {
-    const fallback = new Date(raw);
-    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  if (!parsed) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(raw.trim());
+    if (!match) {
+      const fallback = new Date(raw);
+      parsed = Number.isNaN(fallback.getTime()) ? null : fallback;
+    } else {
+      const conversion = localDateTimeToUtc({
+        timezone: iana,
+        year: Number(match[1]),
+        month: Number(match[2]),
+        day: Number(match[3]),
+        hour: Number(match[4]),
+        minute: Number(match[5]),
+        second: Number(match[6] ?? '0'),
+        disambiguation: getDstFallbackMode(),
+      });
+      parsed = conversion.instant;
+    }
   }
 
-  const iana = ensureIanaTimeZone(timezone) ?? DEFAULT_BUSINESS_TIMEZONE;
-  const conversion = localDateTimeToUtc({
-    timezone: iana,
-    year: Number(match[1]),
-    month: Number(match[2]),
-    day: Number(match[3]),
-    hour: Number(match[4]),
-    minute: Number(match[5]),
-    second: Number(match[6] ?? '0'),
-    disambiguation: getDstFallbackMode(),
-  });
-  return conversion.instant;
+  if (!parsed) return null;
+  return snapPastCalendarYearForward(parsed, iana, now).instant;
 }
 
 export function formatSlotForCaller(isoUtc: string, timezone: string): string {

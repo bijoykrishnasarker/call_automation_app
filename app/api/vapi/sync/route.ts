@@ -7,6 +7,7 @@ import { AI_RECEPTIONIST_SELECT_COLUMNS } from '@/lib/ai-receptionist/types';
 import { normalizeServicesInput } from '@/lib/ai-receptionist/validate-settings';
 import { resolveAppBaseUrl } from '@/lib/vapi/app-base-url';
 import { buildBookingWebhookTools, buildVapiWebhookServer } from '@/lib/vapi/booking-webhook-tools';
+import { DEFAULT_BUSINESS_TIMEZONE, getZonedParts } from '@/lib/vapi/time';
 
 const GENERIC_ERROR_MESSAGE = 'An unexpected error occurred. Please try again.';
 
@@ -65,11 +66,14 @@ function compileSystemPrompt(body: SyncBody): string {
   const services = Array.isArray(body.services) ? body.services.filter((s) => typeof s === 'string' && s.trim()) : [];
   const additionalInfo = (body.additionalInfo ?? '').trim();
   const answerQuestions = body.answerQuestions !== false;
-  const bookAppointments = Boolean(body.bookAppointments);
+  const bookAppointments = body.bookAppointments !== false;
   const takeMessages = body.takeMessages !== false;
   const transferEnabled = Boolean(body.transferEnabled);
   const transferNumber = (body.transferNumber ?? '').trim();
   const afterHoursOnly = Boolean(body.afterHoursOnly);
+  const todayParts = getZonedParts(Date.now(), DEFAULT_BUSINESS_TIMEZONE);
+  const todayYear = todayParts.year;
+  const todayIso = `${String(todayParts.year).padStart(4, '0')}-${String(todayParts.month).padStart(2, '0')}-${String(todayParts.day).padStart(2, '0')}`;
 
   sections.push(`# Role\nYou are ${agentName}, an AI phone receptionist for a small business. Speak in a warm, professional tone. Keep answers short and clear.`);
 
@@ -115,15 +119,18 @@ function compileSystemPrompt(body: SyncBody): string {
   if (bookAppointments) {
     sections.push(
       `# Appointment booking workflow\n` +
+      `Today's date is ${todayIso} in Asia/Dhaka. The current year is ${todayYear}.\n` +
       `The business calendar is the source of truth. Never guess whether a time is free.\n` +
       `When the caller wants an appointment:\n` +
       `1) Collect name, phone, and email, plus the requested date and time.\n` +
-      `2) Call \`check_availability\` with timezone "Asia/Dhaka" unless the caller said another timezone. Use requestedStartAt or localDate+localTime. durationMinutes defaults to 30.\n` +
-      `3) If isAvailable is false, say clearly: that time is already booked, please choose another time. Read the suggestedSlots display times (example: 3:30 PM) and wait for the caller to pick one.\n` +
-      `4) Never say a booking is confirmed until \`book_appointment\` returns booked=true OR you have repeated the date and time and the caller confirmed.\n` +
-      `5) After the caller confirms an open slot, call \`book_appointment\`. That writes the event to the calendar immediately.\n` +
-      `6) If you cannot call book_appointment before the call ends, still capture preferredDate, preferredTime, and set appointmentRequested=true in structured data — the system saves the appointment when the call ends.\n` +
-      `7) If book_appointment returns booked=false / slot_unavailable, tell the caller the time was just taken and offer the new suggestedSlots.`
+      `2) ALWAYS call \`check_availability\` first. That tool reads the live calendar database. Never guess if a time is free.\n` +
+      `   Use timezone "Asia/Dhaka" unless the caller said another timezone. Pass localDate (YYYY-MM-DD) and localTime (HH:mm), or requestedStartAt. durationMinutes defaults to 30.\n` +
+      `3) If the caller says a month and day without a year, use ${todayYear}. Never send 2023, 2024, or 2025 unless the caller explicitly asked for that year.\n` +
+      `4) If isAvailable is false, say clearly: that time is already booked, please choose another time. Read the suggestedSlots display times (example: 3:30 PM) and wait for the caller to pick one.\n` +
+      `5) Never say a booking is confirmed until \`book_appointment\` returns booked=true OR you have repeated the date and time and the caller confirmed.\n` +
+      `6) After the caller confirms an open slot, call \`book_appointment\`. That writes the event to the calendar immediately. Pass startAt with year ${todayYear} (ISO with offset) or localDate YYYY-MM-DD plus localTime HH:mm.\n` +
+      `7) If you cannot call book_appointment before the call ends, still capture preferredDate, preferredTime, and set appointmentRequested=true in structured data — the system saves the appointment when the call ends.\n` +
+      `8) If book_appointment returns booked=false / slot_unavailable, tell the caller the time was just taken and offer the new suggestedSlots.`
     );
   }
 
@@ -244,7 +251,8 @@ export async function POST(request: NextRequest) {
 
   const liveTransferNumber = normalizeLiveTransferNumber(body.transferNumber);
   const voiceId = VOICE_MAP[voiceModel] ?? 'Emma';
-  const systemPrompt = compileSystemPrompt({ ...body, services });
+  const bookAppointments = body.bookAppointments !== false;
+  const systemPrompt = compileSystemPrompt({ ...body, services, bookAppointments });
   const now = new Date().toISOString();
 
   const receptionistPayload = {
@@ -259,7 +267,7 @@ export async function POST(request: NextRequest) {
     business_hours: typeof body.businessHours === 'string' ? body.businessHours.trim() || null : null,
     can_answer_questions: body.answerQuestions !== false,
     can_take_messages: body.takeMessages !== false,
-    can_book_appointments: Boolean(body.bookAppointments),
+    can_book_appointments: bookAppointments,
     transfer_urgent_calls: Boolean(body.transferEnabled),
     services,
     additional_business_info,
@@ -279,7 +287,7 @@ export async function POST(request: NextRequest) {
     const appBaseUrl = resolveAppBaseUrl(request);
     const tools = appBaseUrl
       ? buildBookingWebhookTools(appBaseUrl, {
-          bookAppointments: Boolean(body.bookAppointments),
+          bookAppointments,
           takeMessages: body.takeMessages !== false,
         })
       : [];
@@ -289,7 +297,7 @@ export async function POST(request: NextRequest) {
       webhook_auth_mode: process.env.VAPI_WEBHOOK_AUTH_MODE ?? 'optional',
       synced_at: now,
       webhook_url: webhookServer?.url ?? null,
-      calendar_tools_connected: tools.length > 0 && Boolean(body.bookAppointments),
+      calendar_tools_connected: tools.length > 0 && bookAppointments,
     };
 
     const structuredDataSchema = {
@@ -455,14 +463,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: tools.length > 0 && body.bookAppointments
+      message: tools.length > 0 && bookAppointments
         ? 'Configuration saved and synced with Vapi. Calendar booking tools are connected.'
-        : body.bookAppointments
+        : bookAppointments
           ? 'Settings saved, but calendar tools were NOT attached. Sync again from your public site (not localhost).'
           : 'Configuration saved and synced with Vapi.',
       settings: settingsRow,
       webhookUrl: webhookServer?.url ?? null,
-      calendarToolsConnected: tools.length > 0 && Boolean(body.bookAppointments),
+      calendarToolsConnected: tools.length > 0 && bookAppointments,
     });
   } catch (e) {
     console.error('[POST /api/vapi/sync]', e);

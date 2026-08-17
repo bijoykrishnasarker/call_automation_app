@@ -58,20 +58,40 @@ export async function handleVapiWebhook(input: {
       provider_delivery_id: envelope.provider_delivery_id,
       request_id: input.requestId,
     });
+    const isToolCall = envelope.provider_event_type === 'tool-calls' || envelope.tool_calls.length > 0;
+    if (isToolCall && organizationId) {
+      try {
+        const persisted = await persistEnvelope({
+          supabase: input.supabase,
+          envelope,
+          organizationId,
+          validationErrors: envelope.validation_errors,
+        });
+        return {
+          status: 200,
+          body: { results: persisted.toolResults },
+        };
+      } catch (error) {
+        logVapiWarn('vapi.webhook.duplicate_tool_replay_failed', {
+          request_id: input.requestId,
+          provider_delivery_id: envelope.provider_delivery_id,
+          message: error instanceof Error ? error.message : 'replay failed',
+        });
+      }
+    }
     return {
       status: 200,
-      body:
-        envelope.provider_event_type === 'tool-calls' || envelope.tool_calls.length > 0
-          ? {
-              results: envelope.tool_calls.map(toolCall => ({
-                toolCallId: toolCall.id,
-                result: 'duplicate',
-              })),
-            }
-          : {
-              ok: true,
-              duplicate: true,
-            },
+      body: isToolCall
+        ? {
+            results: envelope.tool_calls.map(toolCall => ({
+              toolCallId: toolCall.id,
+              result: 'duplicate',
+            })),
+          }
+        : {
+            ok: true,
+            duplicate: true,
+          },
     };
   }
 

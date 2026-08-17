@@ -12,10 +12,10 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
 
 export const Calendar: React.FC = () => {
-    const { bookings: appointments, bookingsLoading, bookingsError, contacts, addBooking, updateBooking, deleteBooking } = useApp();
+    const { bookings: allBookings, bookingsLoading, bookingsError, contacts, addBooking, updateBooking, deleteBooking } = useApp();
     const isMobile = useMediaQuery('(max-width: 767px)');
 
-    const [view, setView] = useState<'Day' | 'Week' | 'Month'>('Week');
+    const [view, setView] = useState<'Day' | 'Week' | 'Month'>('Month');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -30,6 +30,18 @@ export const Calendar: React.FC = () => {
         endTime: '10:00',
         type: 'Service' as const
     });
+    const [calendarFilters, setCalendarFilters] = useState({
+        consultation: true,
+        followUp: true,
+        service: true,
+    });
+
+    const appointments = React.useMemo(() => allBookings.filter((appt) => {
+        if (appt.type === 'Consultation' && !calendarFilters.consultation) return false;
+        if (appt.type === 'Checkup' && !calendarFilters.followUp) return false;
+        if (appt.type === 'Service' && !calendarFilters.service) return false;
+        return true;
+    }), [allBookings, calendarFilters]);
 
     const FIRST_HOUR = 8;
     const LAST_HOUR = 22;
@@ -205,29 +217,28 @@ export const Calendar: React.FC = () => {
     const getApptTheme = (type: Appointment['type']) => {
         if (type === 'Consultation') {
             return {
-                bg: 'bg-lime-50 dark:bg-lime-950/40',
-                border: 'border-lime-200/80 dark:border-lime-800/85 border-l-lime-500 dark:border-l-lime-500',
-                text: 'text-lime-700 dark:text-lime-300',
-                badge: 'bg-lime-100 text-lime-800 dark:bg-lime-900/50 dark:text-lime-300',
-                hover: 'hover:bg-lime-100/60 dark:hover:bg-lime-900/20'
+                bg: 'bg-violet-500/15',
+                border: 'border-violet-500/30 border-l-violet-400',
+                text: 'text-violet-200',
+                badge: 'bg-violet-500/20 text-violet-200',
+                hover: 'hover:bg-violet-500/25'
             };
         }
         if (type === 'Checkup') {
             return {
-                bg: 'bg-purple-50 dark:bg-purple-950/40',
-                border: 'border-purple-200/80 dark:border-purple-800/85 border-l-purple-500 dark:border-l-purple-500',
-                text: 'text-purple-700 dark:text-purple-300',
-                badge: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300',
-                hover: 'hover:bg-purple-100/60 dark:hover:bg-purple-900/20'
+                bg: 'bg-emerald-500/15',
+                border: 'border-emerald-500/30 border-l-emerald-400',
+                text: 'text-emerald-200',
+                badge: 'bg-emerald-500/20 text-emerald-200',
+                hover: 'hover:bg-emerald-500/25'
             };
         }
-        // Default to Service (Indigo/Blue)
         return {
-            bg: 'bg-indigo-50 dark:bg-indigo-950/40',
-            border: 'border-indigo-200/80 dark:border-indigo-800/85 border-l-indigo-500 dark:border-l-indigo-500',
-            text: 'text-indigo-700 dark:text-indigo-300',
-            badge: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300',
-            hover: 'hover:bg-indigo-100/60 dark:hover:bg-indigo-900/20'
+            bg: 'bg-indigo-500/15',
+            border: 'border-indigo-500/30 border-l-indigo-400',
+            text: 'text-indigo-200',
+            badge: 'bg-indigo-500/20 text-indigo-200',
+            hover: 'hover:bg-indigo-500/25'
         };
     };
 
@@ -260,25 +271,53 @@ export const Calendar: React.FC = () => {
         const today = new Date();
 
         return (
-            <div className="flex-1 grid grid-cols-7 grid-rows-[auto_1fr] h-full overflow-hidden">
-                {/* Weekday Headers */}
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="text-center py-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 border-b border-r border-slate-200 dark:border-slate-800 last:border-r-0 bg-slate-50 dark:bg-slate-900">
-                        {day}
-                    </div>
-                ))}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="grid grid-cols-7 border-b border-[#1F1F23]">
+                    {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
+                        <div key={day} className="py-2.5 text-center text-[11px] font-semibold tracking-wider text-zinc-500">
+                            {day}
+                        </div>
+                    ))}
+                </div>
 
-                {/* Days Grid */}
-                <div className="col-span-7 grid grid-cols-7 auto-rows-fr overflow-y-auto">
+                <div className="grid min-h-0 flex-1 grid-cols-7 auto-rows-fr overflow-hidden">
                     {days.map((day, i) => {
                         const isCurrentMonth = day.getMonth() === currentDate.getMonth();
                         const isToday = isSameDate(day, today);
+                        const isSelected = isSameDate(day, currentDate);
                         const dayAppts = appointments.filter(a => isSameDate(a.start, day));
 
                         return (
-                            <div key={i} className={`min-h-[100px] border-b border-r border-slate-200 dark:border-slate-800 p-2 relative group transition-colors hover:bg-slate-50 dark:hover:bg-slate-850/50 ${!isCurrentMonth ? 'bg-slate-50/50 dark:bg-slate-950/50 text-slate-400' : 'bg-white dark:bg-slate-900'}`}>
-                                <div className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full mb-1 transition-all ${isToday ? 'bg-lime-600 text-white shadow-sm shadow-lime-600/35 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                    {day.getDate()}
+                            <div
+                                key={i}
+                                onClick={() => setCurrentDate(new Date(day))}
+                                className={`group relative min-h-[88px] cursor-pointer border-b border-r border-[#1F1F23] p-2 transition-colors last:border-r-0 hover:bg-white/[0.02] ${
+                                    isSelected ? 'bg-violet-500/[0.07] ring-1 ring-inset ring-violet-500/50' : 'bg-[#0B0C0E]'
+                                }`}
+                            >
+                                <div className="mb-1 flex items-start justify-between">
+                                    <span
+                                        className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
+                                            isSelected || isToday
+                                                ? 'bg-[#A78BFA] text-zinc-950'
+                                                : isCurrentMonth
+                                                    ? 'text-zinc-200'
+                                                    : 'text-zinc-600'
+                                        }`}
+                                    >
+                                        {day.getDate()}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setNewBooking(prev => ({ ...prev, date: day.toISOString().split('T')[0] }));
+                                            setIsModalOpen(true);
+                                        }}
+                                        className="rounded p-1 text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 group-hover:opacity-100"
+                                    >
+                                        <Plus className="h-3 w-3" />
+                                    </button>
                                 </div>
 
                                 <div className="space-y-1">
@@ -288,35 +327,29 @@ export const Calendar: React.FC = () => {
                                             <button
                                                 key={appt.id}
                                                 type="button"
-                                                onClick={() => openEventDetail(appt)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openEventDetail(appt);
+                                                }}
                                                 onMouseEnter={(e) => handleEventMouseEnter(appt, e)}
                                                 onMouseLeave={handleEventMouseLeave}
-                                                className={`w-full text-left rounded-md border-l-[3px] px-1.5 py-1 shadow-sm ${theme.bg} ${theme.text} ${theme.border} ${theme.hover} transition-all duration-150 cursor-pointer`}
+                                                className={`w-full rounded-md border-l-[3px] px-1.5 py-1 text-left ${theme.bg} ${theme.text} ${theme.border} ${theme.hover}`}
                                             >
-                                                <div className="text-[11px] font-bold leading-tight truncate">
+                                                <div className="truncate text-[11px] font-bold leading-tight">
                                                     {appt.title || 'Appointment'}
                                                 </div>
-                                                <div className="text-[10px] leading-tight opacity-90 truncate">
+                                                <div className="truncate text-[10px] leading-tight opacity-80">
                                                     {formatApptTimeRange(appt)}
                                                 </div>
                                             </button>
                                         );
                                     })}
                                     {dayAppts.length > 3 && (
-                                        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-1">
+                                        <p className="px-1 text-[10px] font-semibold text-zinc-500">
                                             +{dayAppts.length - 3} more
                                         </p>
                                     )}
                                 </div>
-                                {/* Add Button on Hover */}
-                                <button
-                                    onClick={() => {
-                                        setNewBooking(prev => ({ ...prev, date: day.toISOString().split('T')[0] }));
-                                        setIsModalOpen(true);
-                                    }}
-                                    className="absolute top-2 right-2 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Plus className="w-3 h-3 text-slate-600 dark:text-slate-400" />
-                                </button>
                             </div>
                         );
                     })}
@@ -332,7 +365,7 @@ export const Calendar: React.FC = () => {
         return (
             <div className="flex-1 flex overflow-y-auto">
                 {/* Time Column */}
-                <div className="w-20 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 sticky left-0 z-20">
+                <div className="sticky left-0 z-20 w-20 flex-shrink-0 border-r border-[#1F1F23] bg-[#0B0C0E]">
                     {hours.map(hour => (
                         <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 relative">
                             <span className="absolute -top-2.5 right-2 text-xs text-slate-400 font-medium">
@@ -396,14 +429,14 @@ export const Calendar: React.FC = () => {
         return (
             <div className="flex-1 flex flex-col h-full overflow-hidden">
                 {/* Week Header */}
-                <div className="flex border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 z-10 flex-shrink-0">
-                    <div className="w-16 border-r border-slate-200 dark:border-slate-800 flex-shrink-0 bg-slate-50 dark:bg-slate-950/50"></div>
+                <div className="flex flex-shrink-0 border-b border-[#1F1F23] bg-[#0B0C0E]">
+                    <div className="w-16 flex-shrink-0 border-r border-[#1F1F23]"></div>
                     {weekDays.map((date, i) => (
-                        <div key={i} className={`flex-1 py-3 text-center border-r border-slate-200 dark:border-slate-800 last:border-r-0 ${isSameDate(date, new Date()) ? 'bg-lime-50/50 dark:bg-lime-900/10' : ''}`}>
-                            <div className={`text-xs font-medium uppercase mb-1 ${isSameDate(date, new Date()) ? 'text-lime-600' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <div key={i} className={`flex-1 border-r border-[#1F1F23] py-3 text-center last:border-r-0 ${isSameDate(date, new Date()) ? 'bg-violet-500/5' : ''}`}>
+                            <div className={`mb-1 text-xs font-medium uppercase ${isSameDate(date, new Date()) ? 'text-[#A78BFA]' : 'text-zinc-500'}`}>
                                 {date.toLocaleString('default', { weekday: 'short' })}
                             </div>
-                            <div className={`inline-flex w-8 h-8 items-center justify-center rounded-full text-lg font-bold ${isSameDate(date, new Date()) ? 'bg-lime-600 text-white' : 'text-slate-800 dark:text-slate-200'}`}>
+                            <div className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-lg font-bold ${isSameDate(date, new Date()) ? 'bg-[#A78BFA] text-zinc-950' : 'text-zinc-200'}`}>
                                 {date.getDate()}
                             </div>
                         </div>
@@ -412,7 +445,7 @@ export const Calendar: React.FC = () => {
 
                 <div className="flex-1 flex overflow-y-auto">
                     {/* Time Column */}
-                    <div className="w-16 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 sticky left-0 z-10">
+                    <div className="sticky left-0 z-10 w-16 flex-shrink-0 border-r border-[#1F1F23] bg-[#0B0C0E]">
                         {hours.map(hour => (
                             <div key={hour} className="h-16 border-b border-slate-100 dark:border-slate-800 relative">
                                 <span className="absolute -top-2.5 right-2 text-xs text-slate-400 font-medium">
@@ -472,7 +505,7 @@ export const Calendar: React.FC = () => {
                                 })}
 
                                 {/* Hover "Add Slot" effect */}
-                                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none bg-lime-50/10 dark:bg-lime-900/5 transition-opacity"></div>
+                                <div className="absolute inset-0 bg-violet-500/5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100"></div>
                             </div>
                         );
                     })}
@@ -526,7 +559,7 @@ export const Calendar: React.FC = () => {
                                             key={appt.id}
                                             type="button"
                                             onClick={() => openEventDetail(appt)}
-                                            className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-lime-300 hover:bg-lime-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-lime-800 dark:hover:bg-lime-900/10"
+                                            className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-violet-800 dark:hover:bg-violet-900/10"
                                         >
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
@@ -550,11 +583,87 @@ export const Calendar: React.FC = () => {
         );
     };
 
+    const renderMiniCalendar = () => {
+        const days = getMonthDays(currentDate);
+        const monthLabel = currentDate.toLocaleDateString('default', { month: 'long', year: 'numeric' });
+        const weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+        const shiftMiniMonth = (delta: number) => {
+            const next = new Date(currentDate);
+            next.setMonth(next.getMonth() + delta);
+            setCurrentDate(next);
+        };
+
+        return (
+            <div>
+                <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">{monthLabel}</p>
+                    <div className="flex items-center gap-0.5">
+                        <button
+                            type="button"
+                            onClick={() => shiftMiniMonth(-1)}
+                            className="rounded-md p-1 text-zinc-400 hover:bg-white/[0.06] hover:text-white"
+                            aria-label="Previous month"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => shiftMiniMonth(1)}
+                            className="rounded-md p-1 text-zinc-400 hover:bg-white/[0.06] hover:text-white"
+                            aria-label="Next month"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+                <div className="mb-1 grid grid-cols-7 text-center text-[10px] font-semibold text-zinc-500">
+                    {weekdays.map((d, i) => (
+                        <span key={`${d}-${i}`}>{d}</span>
+                    ))}
+                </div>
+                <div className="grid grid-cols-7 gap-y-1">
+                    {days.slice(0, 42).map((day) => {
+                        const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+                        const isSelected = isSameDate(day, currentDate);
+                        const hasEvents = appointments.some((appt) => isSameCalendarDay(appt.start, day));
+
+                        return (
+                            <button
+                                key={day.toISOString()}
+                                type="button"
+                                onClick={() => setCurrentDate(new Date(day))}
+                                className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition-colors ${
+                                    isSelected
+                                        ? 'bg-[#A78BFA] text-zinc-950'
+                                        : isCurrentMonth
+                                            ? 'text-zinc-300 hover:bg-white/[0.06]'
+                                            : 'text-zinc-600 hover:bg-white/[0.04]'
+                                }`}
+                            >
+                                {day.getDate()}
+                                {hasEvents && !isSelected && (
+                                    <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-violet-400" />
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
+    const calendarTypeOptions = [
+        { id: 'consultation' as const, label: 'Lead Consultations', accent: 'accent-violet-500' },
+        { id: 'followUp' as const, label: 'Follow-up Calls', accent: 'accent-emerald-500' },
+        { id: 'service' as const, label: 'Service Visits', accent: 'accent-zinc-500' },
+    ];
+
     if (bookingsLoading) {
         return (
             <div className="h-full flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400">
-                    <div className="w-8 h-8 border-2 border-lime-500 border-t-transparent rounded-full animate-spin" />
+                <div className="flex flex-col items-center gap-3 text-zinc-500">
+                    <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
                     <p className="text-sm font-medium">Loading calendar…</p>
                 </div>
             </div>
@@ -571,41 +680,83 @@ export const Calendar: React.FC = () => {
 
     return (
         <>
-            <div className="flex min-h-[70dvh] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:h-[calc(100dvh-10rem)] dark:border-slate-800 dark:bg-slate-900">
-                {/* Header */}
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center bg-white dark:bg-slate-900 gap-4">
-                    <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
-                        <h2 className="min-w-0 text-xl font-bold text-slate-800 dark:text-slate-100">
+            <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-[#1F1F23] bg-[#0B0C0E]">
+                <aside className="hidden w-64 shrink-0 flex-col border-r border-[#1F1F23] p-4 lg:flex">
+                    {renderMiniCalendar()}
+                    <div className="mt-6">
+                        <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">Calendars</h3>
+                        <div className="space-y-2">
+                            {calendarTypeOptions.map((option) => (
+                                <label key={option.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-1 py-1.5 hover:bg-white/[0.03]">
+                                    <input
+                                        type="checkbox"
+                                        checked={calendarFilters[option.id]}
+                                        onChange={(e) =>
+                                            setCalendarFilters((prev) => ({ ...prev, [option.id]: e.target.checked }))
+                                        }
+                                        className={`h-4 w-4 rounded border-zinc-600 bg-[#121214] ${option.accent}`}
+                                    />
+                                    <span className="text-sm font-medium text-zinc-300">{option.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsModalOpen(true)}
+                        className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-[#A78BFA] px-4 py-2.5 text-sm font-semibold text-zinc-950 transition-colors hover:bg-violet-300"
+                    >
+                        <Plus className="h-4 w-4" />
+                        New Appointment
+                    </button>
+                </aside>
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <div className="flex flex-col gap-3 border-b border-[#1F1F23] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-lg font-bold text-white">
                             {getHeaderText()}
                         </h2>
-                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-                            <button onClick={handlePrevious} className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded shadow-sm text-slate-600 dark:text-slate-400 transition-colors">
-                                <ChevronLeft className="w-4 h-4" />
+                        <button
+                            type="button"
+                            onClick={handleToday}
+                            className="rounded-lg border border-zinc-800 bg-[#141416] px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-white/[0.04]"
+                        >
+                            Today
+                        </button>
+                        <div className="flex items-center">
+                            <button type="button" onClick={handlePrevious} className="rounded-md p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-white">
+                                <ChevronLeft className="h-4 w-4" />
                             </button>
-                            <button onClick={handleNext} className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded shadow-sm text-slate-600 dark:text-slate-400 transition-colors">
-                                <ChevronRight className="w-4 h-4" />
+                            <button type="button" onClick={handleNext} className="rounded-md p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-white">
+                                <ChevronRight className="h-4 w-4" />
                             </button>
                         </div>
-                        <button onClick={handleToday} className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-lime-600 px-3 py-1 rounded-lg hover:bg-lime-50 dark:hover:bg-lime-900/10 transition-colors">Today</button>
                     </div>
 
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex-1 sm:flex-none">
+                    <div className="flex items-center gap-3">
+                        <div className="flex rounded-lg border border-zinc-800 bg-[#141416] p-0.5">
                             {['Day', 'Week', 'Month'].map(v => (
                                 <button
                                     key={v}
-                                    onClick={() => setView(v as any)}
-                                    className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${view === v ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                                    type="button"
+                                    onClick={() => setView(v as 'Day' | 'Week' | 'Month')}
+                                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+                                        view === v
+                                            ? 'bg-[#A78BFA] text-zinc-950'
+                                            : 'text-zinc-400 hover:text-zinc-200'
+                                    }`}
                                 >
                                     {v}
                                 </button>
                             ))}
                         </div>
                         <button
+                            type="button"
                             onClick={() => setIsModalOpen(true)}
-                            className="flex items-center justify-center gap-2 bg-lime-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-lime-700 transition-colors shadow-sm whitespace-nowrap"
+                            className="flex items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[#A78BFA] px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-violet-300 lg:hidden"
                         >
-                            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Booking</span><span className="sm:hidden">New</span>
+                            <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Appointment</span><span className="sm:hidden">New</span>
                         </button>
                     </div>
                 </div>
@@ -614,6 +765,7 @@ export const Calendar: React.FC = () => {
                 {view === 'Month' && renderMonthView()}
                 {view === 'Day' && (isMobile ? renderAgendaView() : renderDayView())}
                 {view === 'Week' && (isMobile ? renderAgendaView() : renderWeekView())}
+            </div>
             </div>
 
             {/* Hover tooltip */}
@@ -651,7 +803,7 @@ export const Calendar: React.FC = () => {
                     <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90dvh] overflow-y-auto">
                         <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                             <h3 id="booking-details-title" className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                <CalendarIcon className="w-4 h-4 text-lime-600" /> Booking details
+                                <CalendarIcon className="w-4 h-4 text-violet-600" /> Booking details
                             </h3>
                             <button onClick={() => { setSelectedAppointment(null); setEditForm(null); }} aria-label="Close booking details" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                                 <X className="w-5 h-5" />
@@ -667,7 +819,7 @@ export const Calendar: React.FC = () => {
                                     type="text"
                                     value={editForm.title}
                                     onChange={e => setEditForm(prev => prev ? { ...prev, title: e.target.value } : null)}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 />
                             </div>
 
@@ -678,7 +830,7 @@ export const Calendar: React.FC = () => {
                                     required
                                     value={editForm.contactId}
                                     onChange={e => setEditForm(prev => prev ? { ...prev, contactId: e.target.value } : null)}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 >
                                     <option value="">Select a contact...</option>
                                     {contacts.map(contact => (
@@ -698,7 +850,7 @@ export const Calendar: React.FC = () => {
                                         type="date"
                                         value={editForm.date}
                                         onChange={e => setEditForm(prev => prev ? { ...prev, date: e.target.value } : null)}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     />
                                 </div>
                                 <div>
@@ -707,7 +859,7 @@ export const Calendar: React.FC = () => {
                                         id="edit-booking-status"
                                         value={editForm.status}
                                         onChange={e => setEditForm(prev => prev ? { ...prev, status: e.target.value as Appointment['status'] } : null)}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     >
                                         <option value="Pending">Pending</option>
                                         <option value="Confirmed">Confirmed</option>
@@ -723,7 +875,7 @@ export const Calendar: React.FC = () => {
                                         id="edit-booking-type"
                                         value={editForm.type}
                                         onChange={e => setEditForm(prev => prev ? { ...prev, type: e.target.value as Appointment['type'] } : null)}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     >
                                         <option value="Service">Service</option>
                                         <option value="Consultation">Consultation</option>
@@ -742,7 +894,7 @@ export const Calendar: React.FC = () => {
                                         type="time"
                                         value={editForm.startTime}
                                         onChange={e => setEditForm(prev => prev ? { ...prev, startTime: e.target.value } : null)}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     />
                                 </div>
                                 <div>
@@ -753,7 +905,7 @@ export const Calendar: React.FC = () => {
                                         type="time"
                                         value={editForm.endTime}
                                         onChange={e => setEditForm(prev => prev ? { ...prev, endTime: e.target.value } : null)}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     />
                                 </div>
                             </div>
@@ -775,7 +927,7 @@ export const Calendar: React.FC = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 py-2.5 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 transition-colors shadow-sm"
+                                    className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm"
                                 >
                                     Save changes
                                 </button>
@@ -791,7 +943,7 @@ export const Calendar: React.FC = () => {
                     <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90dvh] overflow-y-auto">
                         <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                             <h3 id="new-booking-title" className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                <CalendarIcon className="w-4 h-4 text-lime-600" /> New Appointment
+                                <CalendarIcon className="w-4 h-4 text-violet-600" /> New Appointment
                             </h3>
                             <button onClick={() => setIsModalOpen(false)} aria-label="Close new appointment dialog" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                                 <X className="w-5 h-5" />
@@ -808,7 +960,7 @@ export const Calendar: React.FC = () => {
                                     placeholder="e.g. Plumbing Checkup"
                                     value={newBooking.title}
                                     onChange={e => setNewBooking({ ...newBooking, title: e.target.value })}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 />
                             </div>
 
@@ -819,7 +971,7 @@ export const Calendar: React.FC = () => {
                                     required
                                     value={newBooking.contactId}
                                     onChange={e => setNewBooking({ ...newBooking, contactId: e.target.value })}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                 >
                                     <option value="">Select a contact...</option>
                                     {contacts.map(contact => (
@@ -839,7 +991,7 @@ export const Calendar: React.FC = () => {
                                         type="date"
                                         value={newBooking.date}
                                         onChange={e => setNewBooking({ ...newBooking, date: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     />
                                 </div>
                                 <div>
@@ -848,7 +1000,7 @@ export const Calendar: React.FC = () => {
                                         id="new-booking-type"
                                         value={newBooking.type}
                                         onChange={e => setNewBooking({ ...newBooking, type: e.target.value as any })}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     >
                                         <option value="Service">Service</option>
                                         <option value="Consultation">Consultation</option>
@@ -866,7 +1018,7 @@ export const Calendar: React.FC = () => {
                                         type="time"
                                         value={newBooking.startTime}
                                         onChange={e => setNewBooking({ ...newBooking, startTime: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     />
                                 </div>
                                 <div>
@@ -877,7 +1029,7 @@ export const Calendar: React.FC = () => {
                                         type="time"
                                         value={newBooking.endTime}
                                         onChange={e => setNewBooking({ ...newBooking, endTime: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     />
                                 </div>
                             </div>
@@ -892,7 +1044,7 @@ export const Calendar: React.FC = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 py-2.5 bg-lime-600 text-white rounded-lg text-sm font-bold hover:bg-lime-700 transition-colors shadow-sm"
+                                    className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm"
                                 >
                                     Create Booking
                                 </button>
