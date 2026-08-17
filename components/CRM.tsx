@@ -73,6 +73,11 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
   const [isSavingInfo, setIsSavingInfo] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const openAddContactModal = () => {
+    onClearContactsError?.();
+    setFormError(null);
+    setIsAddModalOpen(true);
+  };
 
   const filteredContacts = contacts.filter(c => {
     const q = searchQuery.toLowerCase();
@@ -163,6 +168,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
 
     try {
       const created = await onAddContact(contact);
+      onClearContactsError?.();
       if (!created) {
         setFormError('Could not save this contact. Check the details and try again.');
         return;
@@ -473,10 +479,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
             </button>
             <button
               type="button"
-              onClick={() => {
-                setFormError(null);
-                setIsAddModalOpen(true);
-              }}
+              onClick={openAddContactModal}
               className="flex items-center gap-2 px-4 py-2.5 bg-violet-500 text-white rounded-xl text-sm font-semibold hover:bg-violet-400 transition-all active:scale-95"
             >
               <Plus className="w-4 h-4" />
@@ -500,7 +503,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                   {contacts.length === 0 && (
                     <button
                       type="button"
-                      onClick={() => setIsAddModalOpen(true)}
+                      onClick={openAddContactModal}
                       className="mt-2 inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400"
                     >
                       <Plus className="h-4 w-4" />
@@ -567,7 +570,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                       {contacts.length === 0 && (
                         <button
                           type="button"
-                          onClick={() => setIsAddModalOpen(true)}
+                          onClick={openAddContactModal}
                           className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-violet-500 text-white rounded-lg text-sm font-medium hover:bg-violet-400"
                         >
                           <Plus className="w-4 h-4" />

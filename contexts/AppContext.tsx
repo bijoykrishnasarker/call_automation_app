@@ -103,7 +103,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 if (!cancelled) setContacts(data);
             })
             .catch(err => {
-                if (!cancelled) setContactsError(err?.message ?? 'Failed to load contacts');
+                if (!cancelled) setContactsError(err?.message ?? 'Could not load contacts. Refresh the page.');
             })
             .finally(() => {
                 if (!cancelled) setContactsLoading(false);

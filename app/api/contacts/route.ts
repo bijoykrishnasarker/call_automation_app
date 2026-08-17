@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseClientForUser } from '@/lib/supabase/server';
+import { ensureOrganizationForUser } from '@/lib/supabase/ensure-organization';
 import {
   friendlyContactWriteError,
   isMissingColumnError,
@@ -7,16 +8,15 @@ import {
 } from '@/lib/ai-receptionist/supabase-errors';
 
 const GENERIC_ERROR_MESSAGE = 'An unexpected error occurred. Please try again.';
-const OPTIONAL_CONTACT_COLUMNS = [
+/** Safe to omit when a column is missing from an older schema. */
+const STRIPPABLE_OPTIONAL_COLUMNS = new Set([
   'primary_phone',
   'middle_name',
   'mobile_phone',
   'job_title',
   'canonical_created_at',
   'last_canonical_event_at',
-  'organization_id',
-  'external_contact_id',
-];
+]);
 
 function getAccessToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization');
@@ -39,21 +39,11 @@ async function insertContactRow(
     if (!error) return { data: null, error: { message: 'Failed to save contact' } };
 
     const missing = missingColumnName(error);
-    if (missing && missing in current && missing !== 'user_id' && missing !== 'first_name') {
+    if (missing && missing in current && STRIPPABLE_OPTIONAL_COLUMNS.has(missing)) {
       const next = { ...current };
       delete next[missing];
       current = next;
       continue;
-    }
-
-    if (isMissingColumnError(error)) {
-      const extra = OPTIONAL_CONTACT_COLUMNS.find((column) => column in current);
-      if (extra) {
-        const next = { ...current };
-        delete next[extra];
-        current = next;
-        continue;
-      }
     }
 
     return { data: null, error };
@@ -102,9 +92,17 @@ export async function POST(request: NextRequest) {
     .select('organization_id')
     .eq('id', user.id)
     .maybeSingle();
-  const organizationId = typeof profile?.organization_id === 'string' ? profile.organization_id : null;
+  let organizationId = typeof profile?.organization_id === 'string' ? profile.organization_id : null;
+  if (!organizationId) {
+    organizationId = await ensureOrganizationForUser(
+      supabase,
+      user.id,
+      user.email?.split('@')[0] ?? pickString(body.company) ?? firstName
+    );
+  }
 
   const phone = pickString(body.phone);
+  const externalContactId = `manual:${crypto.randomUUID()}`;
   const payload: Record<string, unknown> = {
     user_id: user.id,
     first_name: firstName,
@@ -122,12 +120,25 @@ export async function POST(request: NextRequest) {
     zip: pickString(body.zip) || null,
     notes: Array.isArray(body.notes) ? body.notes : [],
     tasks: Array.isArray(body.tasks) ? body.tasks : [],
-    external_contact_id: `manual:${crypto.randomUUID()}`,
+    external_contact_id: externalContactId,
   };
   if (organizationId) payload.organization_id = organizationId;
   if (phone) payload.primary_phone = phone;
 
-  const { data, error } = await insertContactRow(supabase, payload);
+  let { data, error } = await insertContactRow(supabase, payload);
+
+  // Retry once without organization_id if FK/setup blocked the first insert.
+  if (error && organizationId) {
+    const msg = (error.message ?? '').toLowerCase();
+    const code = String(error.code ?? '');
+    if (code === '23503' || msg.includes('organization')) {
+      const fallback = { ...payload };
+      delete fallback.organization_id;
+      const retry = await insertContactRow(supabase, fallback);
+      data = retry.data;
+      error = retry.error;
+    }
+  }
   if (error || !data) {
     console.error('[POST /api/contacts]', error);
     return NextResponse.json(

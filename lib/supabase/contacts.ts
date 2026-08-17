@@ -100,6 +100,20 @@ function contactToPayload(contact: Partial<Contact>): Record<string, unknown> {
   };
 }
 
+async function getAccessToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) return session.access_token;
+
+  const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    throw new Error(refreshError.message || 'Sign in to continue.');
+  }
+  const token = refreshed.session?.access_token;
+  if (token) return token;
+
+  throw new Error('Sign in to add contacts.');
+}
+
 export async function fetchContacts(userId: string): Promise<Contact[]> {
   const { data, error } = await supabase
     .from('contacts')
@@ -112,9 +126,7 @@ export async function fetchContacts(userId: string): Promise<Contact[]> {
 }
 
 export async function createContact(userId: string, contact: Omit<Contact, 'id'> | Contact): Promise<Contact> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) throw new Error('Sign in to add contacts.');
+  const token = await getAccessToken();
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
@@ -199,9 +211,7 @@ export async function updateContact(userId: string, contact: Contact): Promise<C
 }
 
 export async function deleteContact(_userId: string, contactId: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) throw new Error('Sign in to delete contacts.');
+  const token = await getAccessToken();
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
