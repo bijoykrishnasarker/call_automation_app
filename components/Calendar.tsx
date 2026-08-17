@@ -15,7 +15,8 @@ import { useApp } from '@/contexts/AppContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2, Loader2 } from 'lucide-react';
 
-import { ContactSuggestInput, createContactFromTypedName } from '@/components/ui/ContactSuggestInput';
+import { ContactSuggestInput } from '@/components/ui/ContactSuggestInput';
+import { createContactFromTypedQuery, resolveContactIdFromQuery } from '@/lib/contacts/resolve-contact-query';
 
 function emptyNewBooking(date = getZonedDateKey(new Date())) {
     return {
@@ -42,7 +43,7 @@ export const Calendar: React.FC = () => {
         deleteBooking,
     } = useApp();
     const createContactForBooking = useCallback(
-        (name: string) => createContactFromTypedName(addContact, name),
+        (query: string) => createContactFromTypedQuery(addContact, query),
         [addContact]
     );
     const isMobile = useMediaQuery('(max-width: 767px)');
@@ -55,6 +56,7 @@ export const Calendar: React.FC = () => {
     const [hoveredTooltipRect, setHoveredTooltipRect] = useState<{ left: number; top: number; width: number } | null>(null);
     const [editForm, setEditForm] = useState<{ title: string; contactId: string; date: string; startTime: string; endTime: string; type: Appointment['type']; status: Appointment['status'] } | null>(null);
     const [newBooking, setNewBooking] = useState(emptyNewBooking);
+    const [bookingContactQuery, setBookingContactQuery] = useState('');
     const [bookingFormError, setBookingFormError] = useState<string | null>(null);
     const [isSavingBooking, setIsSavingBooking] = useState(false);
     const [editFormError, setEditFormError] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export const Calendar: React.FC = () => {
 
     const openNewBookingModal = (date?: Date) => {
         setBookingFormError(null);
+        setBookingContactQuery('');
         setNewBooking(emptyNewBooking(date ? calendarCellDateKey(date) : getZonedDateKey(new Date())));
         setIsModalOpen(true);
         void reloadContacts();
@@ -115,8 +118,18 @@ export const Calendar: React.FC = () => {
             setBookingFormError('Enter a title.');
             return;
         }
-        if (!newBooking.contactId) {
-            setBookingFormError('Type and select a contact, or add a new one from suggestions.');
+
+        let contactId = newBooking.contactId;
+        if (!contactId && bookingContactQuery.trim()) {
+            try {
+                contactId = (await resolveContactIdFromQuery(contacts, bookingContactQuery, addContact)) ?? '';
+            } catch (err) {
+                setBookingFormError(err instanceof Error ? err.message : 'Could not save contact for this booking.');
+                return;
+            }
+        }
+        if (!contactId) {
+            setBookingFormError('Enter a phone number or name. Matching CRM contacts appear as you type.');
             return;
         }
 
@@ -136,7 +149,7 @@ export const Calendar: React.FC = () => {
         setIsSavingBooking(true);
         try {
             const created = await addBooking({
-                contactId: newBooking.contactId,
+                contactId,
                 title,
                 startAt,
                 endAt,
@@ -1063,13 +1076,14 @@ export const Calendar: React.FC = () => {
                                     contacts={contacts}
                                     contactId={newBooking.contactId}
                                     onContactIdChange={id => setNewBooking(prev => ({ ...prev, contactId: id }))}
+                                    onQueryChange={setBookingContactQuery}
                                     onCreateContact={createContactForBooking}
                                     loading={contactsLoading}
                                     disabled={isSavingBooking}
-                                    placeholder="Type name, phone, or email for suggestions…"
+                                    placeholder="Type phone number or name…"
                                 />
                                 <p className="mt-1.5 text-[11px] text-zinc-500">
-                                    Type to search CRM contacts. Pick a suggestion or add a new contact from the list.
+                                    Type <strong className="font-semibold text-zinc-400">017…</strong> or a name — old CRM contacts show as suggestions. No need to click if you press Create Booking.
                                 </p>
                             </div>
 

@@ -1,42 +1,19 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Contact, ContactStatus } from '@/types';
+import { Contact } from '@/types';
 import { formatContactOption } from '@/lib/contacts/format-contact-option';
-
-function filterContacts(contacts: Contact[], query: string): Contact[] {
-  const q = query.trim().toLowerCase();
-  const list = q
-    ? contacts.filter(c => {
-        const haystack = [
-          c.firstName,
-          c.lastName,
-          c.email,
-          c.phone,
-          c.company,
-          formatContactOption(c),
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(q);
-      })
-    : contacts;
-  return list.slice(0, 8);
-}
-
-function splitName(raw: string): { firstName: string; lastName: string } {
-  const parts = raw.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return { firstName: '', lastName: '' };
-  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
-  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
-}
+import {
+  createContactFromTypedQuery,
+  filterContactsByQuery,
+} from '@/lib/contacts/resolve-contact-query';
 
 export interface ContactSuggestInputProps {
   contacts: Contact[];
   contactId: string;
   onContactIdChange: (contactId: string) => void;
-  onCreateContact?: (name: string) => Promise<Contact | null>;
+  onQueryChange?: (query: string) => void;
+  onCreateContact?: (query: string) => Promise<Contact | null>;
   loading?: boolean;
   disabled?: boolean;
   id?: string;
@@ -48,12 +25,13 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
   contacts,
   contactId,
   onContactIdChange,
+  onQueryChange,
   onCreateContact,
   loading = false,
   disabled = false,
   id = 'contact-suggest',
   placeholder = 'Type name, phone, or email…',
-  emptyHint = 'Start typing to see CRM contacts',
+  emptyHint = 'Type phone or name — previous CRM contacts appear as suggestions',
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
@@ -68,10 +46,8 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
   useEffect(() => {
     if (selected) {
       setQuery(formatContactOption(selected));
-    } else if (!contactId) {
-      setQuery('');
     }
-  }, [selected, contactId]);
+  }, [selected]);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -81,7 +57,7 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  const suggestions = useMemo(() => filterContacts(contacts, query), [contacts, query]);
+  const suggestions = useMemo(() => filterContactsByQuery(contacts, query), [contacts, query]);
   const trimmed = query.trim();
   const exactMatch = suggestions.some(
     c => formatContactOption(c).toLowerCase() === trimmed.toLowerCase()
@@ -90,11 +66,12 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
     Boolean(onCreateContact) &&
     trimmed.length >= 2 &&
     !exactMatch &&
-    !suggestions.some(c => c.id === contactId);
+    contactId === '';
 
   const pickContact = (contact: Contact) => {
     onContactIdChange(contact.id);
     setQuery(formatContactOption(contact));
+    onQueryChange?.(formatContactOption(contact));
     setOpen(false);
   };
 
@@ -106,10 +83,22 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
       if (created) {
         onContactIdChange(created.id);
         setQuery(formatContactOption(created));
+        onQueryChange?.(formatContactOption(created));
         setOpen(false);
       }
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handlePickFirstOrCreate = async () => {
+    if (contactId) return;
+    if (suggestions.length === 1) {
+      pickContact(suggestions[0]);
+      return;
+    }
+    if (showCreate) {
+      await handleCreate();
     }
   };
 
@@ -125,10 +114,17 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
         onChange={e => {
           const next = e.target.value;
           setQuery(next);
+          onQueryChange?.(next);
           onContactIdChange('');
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && open && !contactId) {
+            e.preventDefault();
+            void handlePickFirstOrCreate();
+          }
+        }}
         className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
       />
 
@@ -137,9 +133,17 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
           className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
           role="listbox"
         >
+          {!trimmed && contacts.length > 0 && (
+            <li className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              Recent CRM contacts
+            </li>
+          )}
+
           {suggestions.length === 0 && !showCreate && (
             <li className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
-              {contacts.length === 0 ? 'No CRM contacts yet. Type a name to add one.' : 'No matching contacts'}
+              {contacts.length === 0
+                ? 'No contacts yet — type a phone or name, then press Enter or Create Booking.'
+                : 'No match — press Enter or tap below to use this as a new contact.'}
             </li>
           )}
 
@@ -152,7 +156,9 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
                 onMouseDown={e => e.preventDefault()}
                 onClick={() => pickContact(contact)}
                 className={`w-full px-3 py-2 text-left text-sm hover:bg-violet-50 dark:hover:bg-violet-900/20 ${
-                  contact.id === contactId ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'text-slate-800 dark:text-slate-200'
+                  contact.id === contactId
+                    ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+                    : 'text-slate-800 dark:text-slate-200'
                 }`}
               >
                 {formatContactOption(contact)}
@@ -169,7 +175,7 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
                 disabled={creating}
                 className="w-full border-t border-slate-100 px-3 py-2 text-left text-sm font-medium text-violet-600 hover:bg-violet-50 disabled:opacity-50 dark:border-slate-800 dark:text-violet-400 dark:hover:bg-violet-900/20"
               >
-                {creating ? 'Adding contact…' : `+ Add "${trimmed}" to CRM & use for booking`}
+                {creating ? 'Saving contact…' : `+ Use "${trimmed}" as contact for this booking`}
               </button>
             </li>
           )}
@@ -185,24 +191,4 @@ export const ContactSuggestInput: React.FC<ContactSuggestInputProps> = ({
   );
 };
 
-export async function createContactFromTypedName(
-  addContact: (contact: Contact) => Promise<Contact | null>,
-  rawName: string
-): Promise<Contact | null> {
-  const { firstName, lastName } = splitName(rawName);
-  if (!firstName) return null;
-  return addContact({
-    id: crypto.randomUUID(),
-    firstName,
-    lastName,
-    email: '',
-    phone: '',
-    company: '',
-    status: ContactStatus.NewLead,
-    tags: ['Booking'],
-    lastActivity: 'Just now',
-    source: 'Calendar Booking',
-    notes: [],
-    tasks: [],
-  });
-}
+export { createContactFromTypedQuery as createContactFromTypedName };
