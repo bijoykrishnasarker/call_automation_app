@@ -35,6 +35,7 @@ interface AppContextType {
     contactsLoading: boolean;
     contactsError: string | null;
     clearContactsError: () => void;
+    reloadContacts: () => Promise<void>;
     addContact: (contact: Contact) => Promise<Contact | null>;
     updateContact: (contact: Contact) => Promise<void>;
     deleteContact: (contactId: string) => Promise<void>;
@@ -220,6 +221,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
 
     const clearContactsError = useCallback(() => setContactsError(null), []);
+
+    const reloadContacts = useCallback(async () => {
+        if (!user?.id) return;
+        setContactsLoading(true);
+        setContactsError(null);
+        try {
+            const data = await fetchContacts(user.id);
+            setContacts(data);
+        } catch (err) {
+            setContactsError(err instanceof Error ? err.message : 'Could not load contacts. Refresh the page.');
+        } finally {
+            setContactsLoading(false);
+        }
+    }, [user?.id]);
 
     const addContact = useCallback(
         async (contact: Contact): Promise<Contact | null> => {
@@ -516,6 +531,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 contactsLoading,
                 contactsError,
                 clearContactsError,
+                reloadContacts,
                 addContact,
                 updateContact,
                 deleteContact,
