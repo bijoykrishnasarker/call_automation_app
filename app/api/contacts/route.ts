@@ -158,6 +158,32 @@ export async function POST(request: NextRequest) {
   }
 
   if (error || !data) {
+    const withoutOrg = { ...payload };
+    delete withoutOrg.organization_id;
+    delete withoutOrg.primary_phone;
+    const service = await insertContactWithServiceRole(withoutOrg);
+    data = service.data;
+    error = service.error;
+  }
+
+  if (error || !data) {
+    const minimal: Record<string, unknown> = {
+      user_id: user.id,
+      first_name: firstName,
+      last_name: pickString(body.lastName) || '—',
+      email: pickString(body.email),
+      phone,
+      status: pickString(body.status) || 'New Lead',
+      tags: Array.isArray(body.tags) ? body.tags : [],
+      source: pickString(body.source) || 'Manual Entry',
+      external_contact_id: externalContactId,
+    };
+    const serviceMinimal = await insertContactWithServiceRole(minimal);
+    data = serviceMinimal.data;
+    error = serviceMinimal.error;
+  }
+
+  if (error || !data) {
     console.error('[POST /api/contacts]', error);
     return NextResponse.json(
       { error: 'Validation failed', message: friendlyContactWriteError(error) },

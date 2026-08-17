@@ -243,6 +243,10 @@ export async function fetchContacts(userId: string): Promise<Contact[]> {
 export async function createContact(userId: string, contact: Omit<Contact, 'id'> | Contact): Promise<Contact> {
   const token = await getAccessToken();
 
+  const organizationId =
+    (await ensureOrganizationForUserClient(userId, contact.company || contact.firstName)) ??
+    (await getOrganizationId(userId));
+
   // Server route ensures organization + service-role fallback on production.
   try {
     return await createContactViaApi(token, contact);
@@ -254,20 +258,15 @@ export async function createContact(userId: string, contact: Omit<Contact, 'id'>
       throw new Error('Saving the contact took too long. Please try again.');
     }
 
-    const organizationId =
-      (await ensureOrganizationForUserClient(userId, contact.company || contact.firstName)) ??
-      (await getOrganizationId(userId));
     const payload = buildContactInsertPayload(userId, contact, organizationId);
 
     try {
       const row = await insertContactRecord(payload);
       return rowToContact(row);
     } catch (directErr) {
-      throw directErr instanceof Error
-        ? directErr
-        : apiErr instanceof Error
-          ? apiErr
-          : new Error('Failed to add contact');
+      const apiMessage = apiErr instanceof Error ? apiErr.message : '';
+      const directMessage = directErr instanceof Error ? directErr.message : '';
+      throw new Error(directMessage || apiMessage || 'Failed to add contact');
     }
   }
 }
