@@ -71,6 +71,8 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
   const [contactPendingDelete, setContactPendingDelete] = useState<Contact | null>(null);
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [isSavingInfo, setIsSavingInfo] = useState(false);
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const openAddContactModal = () => {
@@ -196,6 +198,12 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
 
   // --- Import Handlers ---
   const handleImportClick = () => {
+    if (!onAddContact) {
+      setImportMessage('Sign in to import contacts.');
+      return;
+    }
+    onClearContactsError?.();
+    setImportMessage(null);
     fileInputRef.current?.click();
   };
 
@@ -203,41 +211,84 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
     const file = event.target.files?.[0];
     if (!file || !onAddContact) return;
 
+    setIsImportingCsv(true);
+    setImportMessage(null);
+    onClearContactsError?.();
+
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const content = e.target?.result as string;
-      const lines = content.split(/\r\n|\n/);
-      let startIndex = 0;
-      if (lines[0]?.toLowerCase().includes('email') || lines[0]?.toLowerCase().includes('name')) {
-        startIndex = 1;
+      try {
+        const content = e.target?.result as string;
+        const lines = content.split(/\r\n|\n/);
+        let startIndex = 0;
+        if (lines[0]?.toLowerCase().includes('email') || lines[0]?.toLowerCase().includes('name')) {
+          startIndex = 1;
+        }
+
+        let count = 0;
+        let failed = 0;
+        let skipped = 0;
+        let lastError = '';
+
+        for (let i = startIndex; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+          if (!cols[0]) {
+            skipped++;
+            continue;
+          }
+
+          const newC: Contact = {
+            id: crypto.randomUUID(),
+            firstName: cols[0] || 'Unknown',
+            lastName: cols[1] || '',
+            email: cols[2] || '',
+            phone: cols[3] || '',
+            company: cols[4] || '',
+            tags: cols[5] ? cols[5].split(';').map(t => t.trim()) : ['Imported'],
+            status: ContactStatus.NewLead,
+            source: 'CSV Import',
+            lastActivity: 'Just now',
+            notes: [],
+            tasks: []
+          };
+
+          try {
+            const created = await onAddContact(newC);
+            if (created) count++;
+            else {
+              failed++;
+              lastError = 'Could not save one or more contacts.';
+            }
+          } catch (err) {
+            failed++;
+            lastError = err instanceof Error ? err.message : 'Could not save contact';
+          }
+        }
+
+        if (count > 0) {
+          setImportMessage(`Imported ${count} contact${count === 1 ? '' : 's'} successfully.`);
+        } else if (failed > 0) {
+          setImportMessage(
+            lastError ||
+              'Import failed. Finish account setup (onboarding) or refresh the page, then try again.'
+          );
+        } else {
+          setImportMessage(
+            skipped > 0
+              ? 'No valid rows found. CSV format: First Name, Last Name, Email, Phone, Company'
+              : 'CSV file is empty. Use: First Name, Last Name, Email, Phone, Company'
+          );
+        }
+      } finally {
+        setIsImportingCsv(false);
       }
-
-      let count = 0;
-      for (let i = startIndex; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        const cols = line.split(',');
-        if (cols.length < 3) continue;
-
-        const newC: Contact = {
-          id: crypto.randomUUID(),
-          firstName: cols[0]?.trim() || 'Unknown',
-          lastName: cols[1]?.trim() || '',
-          email: cols[2]?.trim() || '',
-          phone: cols[3]?.trim() || '',
-          company: cols[4]?.trim() || '',
-          tags: cols[5] ? cols[5].split(';').map(t => t.trim()) : ['Imported'],
-          status: ContactStatus.NewLead,
-          source: 'CSV Import',
-          lastActivity: 'Just now',
-          notes: [],
-          tasks: []
-        };
-        const created = await onAddContact(newC).catch(() => null);
-        if (created) count++;
-      }
-      alert(count > 0 ? `Saved ${count} contacts.` : 'No contacts were imported.');
+    };
+    reader.onerror = () => {
+      setImportMessage('Could not read the CSV file.');
+      setIsImportingCsv(false);
     };
     reader.readAsText(file);
     if (event.target) event.target.value = '';
@@ -432,15 +483,22 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
         />
       </div>
 
-      {contactsError && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
-          <p>{contactsError}</p>
-          {onClearContactsError && (
+      {(contactsError || importMessage) && (
+        <div className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2 text-sm ${
+          contactsError || importMessage?.includes('failed') || importMessage?.includes('Could not') || importMessage?.includes('Sign in')
+            ? 'border-red-500/30 bg-red-500/10 text-red-400'
+            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+        }`}>
+          <p>{contactsError ?? importMessage}</p>
+          {(onClearContactsError || importMessage) && (
             <button
               type="button"
-              onClick={onClearContactsError}
-              aria-label="Dismiss error"
-              className="rounded p-1 text-red-400 hover:bg-red-500/20 hover:text-red-200"
+              onClick={() => {
+                onClearContactsError?.();
+                setImportMessage(null);
+              }}
+              aria-label="Dismiss message"
+              className="rounded p-1 hover:bg-white/10"
             >
               <X className="h-4 w-4" />
             </button>
@@ -475,11 +533,12 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
           <div className="flex flex-wrap gap-2 sm:ml-4 sm:justify-end">
             <button
               onClick={handleImportClick}
-              className="flex items-center gap-2 px-3 py-2.5 bg-[#141416] border border-white/[0.08] text-zinc-400 hover:bg-white/[0.04] rounded-xl text-sm font-semibold transition-colors active:scale-95"
+              disabled={isImportingCsv}
+              className="flex items-center gap-2 px-3 py-2.5 bg-[#141416] border border-white/[0.08] text-zinc-400 hover:bg-white/[0.04] rounded-xl text-sm font-semibold transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
               title="Import CSV"
             >
               <Upload className="w-4 h-4" />
-              <span className="hidden sm:inline">Import CSV</span>
+              <span className="hidden sm:inline">{isImportingCsv ? 'Importing…' : 'Import CSV'}</span>
             </button>
             <button
               type="button"

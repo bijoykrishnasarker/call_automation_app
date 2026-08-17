@@ -1,6 +1,7 @@
 import { Contact, ContactStatus, Note, Task } from '@/types';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingColumnError, friendlyContactWriteError, missingColumnName } from '@/lib/ai-receptionist/supabase-errors';
+import { ensureOrganizationForUserClient } from '@/lib/supabase/ensure-organization-client';
 
 /** DB row shape (snake_case) */
 interface ContactRow {
@@ -175,6 +176,59 @@ async function getAccessToken(): Promise<string> {
   throw new Error('Sign in to add contacts.');
 }
 
+function contactToApiBody(contact: Omit<Contact, 'id'> | Contact): Record<string, unknown> {
+  return {
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    email: contact.email,
+    phone: contact.phone,
+    company: contact.company,
+    status: contact.status,
+    tags: contact.tags,
+    source: contact.source,
+    lastActivity: contact.lastActivity,
+    notes: contact.notes,
+    tasks: Array.isArray(contact.tasks)
+      ? contact.tasks.map(t => ({
+          id: t.id,
+          title: t.title,
+          dueDate: t.dueDate instanceof Date ? t.dueDate.toISOString() : t.dueDate,
+          completed: t.completed,
+        }))
+      : [],
+    address: contact.address,
+    city: contact.city,
+    state: contact.state,
+    zip: contact.zip,
+  };
+}
+
+async function createContactViaApi(
+  token: string,
+  contact: Omit<Contact, 'id'> | Contact
+): Promise<Contact> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(contactToApiBody(contact)),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({})) as { contact?: ContactRow; message?: string };
+    if (!res.ok || !data.contact) {
+      throw new Error(data.message || friendlyContactWriteError(null));
+    }
+    return rowToContact(data.contact);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchContacts(userId: string): Promise<Contact[]> {
   const { data, error } = await supabase
     .from('contacts')
@@ -187,67 +241,33 @@ export async function fetchContacts(userId: string): Promise<Contact[]> {
 }
 
 export async function createContact(userId: string, contact: Omit<Contact, 'id'> | Contact): Promise<Contact> {
-  const organizationId = await getOrganizationId(userId);
-  const payload = buildContactInsertPayload(userId, contact, organizationId);
+  const token = await getAccessToken();
 
+  // Server route ensures organization + service-role fallback on production.
   try {
-    const row = await insertContactRecord(payload);
-    return rowToContact(row);
-  } catch (directErr) {
-    // Fallback to API when direct client insert fails (e.g. stale auth lock).
+    return await createContactViaApi(token, contact);
+  } catch (apiErr) {
+    if (
+      (typeof DOMException !== 'undefined' && apiErr instanceof DOMException && apiErr.name === 'AbortError') ||
+      (apiErr instanceof Error && apiErr.name === 'AbortError')
+    ) {
+      throw new Error('Saving the contact took too long. Please try again.');
+    }
+
+    const organizationId =
+      (await ensureOrganizationForUserClient(userId, contact.company || contact.firstName)) ??
+      (await getOrganizationId(userId));
+    const payload = buildContactInsertPayload(userId, contact, organizationId);
+
     try {
-      const token = await getAccessToken();
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-      try {
-        const res = await fetch('/api/contacts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            email: contact.email,
-            phone: contact.phone,
-            company: contact.company,
-            status: contact.status,
-            tags: contact.tags,
-            source: contact.source,
-            lastActivity: contact.lastActivity,
-            notes: contact.notes,
-            tasks: Array.isArray(contact.tasks)
-              ? contact.tasks.map(t => ({
-                  id: t.id,
-                  title: t.title,
-                  dueDate: t.dueDate instanceof Date ? t.dueDate.toISOString() : t.dueDate,
-                  completed: t.completed,
-                }))
-              : [],
-            address: contact.address,
-            city: contact.city,
-            state: contact.state,
-            zip: contact.zip,
-          }),
-          signal: controller.signal,
-        });
-        const data = await res.json().catch(() => ({})) as { contact?: ContactRow; message?: string };
-        if (!res.ok || !data.contact) {
-          throw new Error(data.message || friendlyContactWriteError(null));
-        }
-        return rowToContact(data.contact);
-      } finally {
-        clearTimeout(timer);
-      }
-    } catch (apiErr) {
-      if (
-        (typeof DOMException !== 'undefined' && apiErr instanceof DOMException && apiErr.name === 'AbortError') ||
-        (apiErr instanceof Error && apiErr.name === 'AbortError')
-      ) {
-        throw new Error('Saving the contact took too long. Please try again.');
-      }
-      throw apiErr instanceof Error ? apiErr : directErr instanceof Error ? directErr : new Error('Failed to add contact');
+      const row = await insertContactRecord(payload);
+      return rowToContact(row);
+    } catch (directErr) {
+      throw directErr instanceof Error
+        ? directErr
+        : apiErr instanceof Error
+          ? apiErr
+          : new Error('Failed to add contact');
     }
   }
 }

@@ -983,8 +983,6 @@ export const Calendar: React.FC = () => {
                                 </div>
                             </div>
 
-                            </div>
-
                             {editFormError && (
                                 <p className="text-sm font-medium text-red-500">{editFormError}</p>
                             )}
@@ -1115,8 +1113,6 @@ export const Calendar: React.FC = () => {
                                         className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                     />
                                 </div>
-                            </div>
-
                             </div>
 
                             {contacts.length === 0 && (
