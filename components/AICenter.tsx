@@ -97,6 +97,12 @@ function stringifyVapiError(err: unknown): string {
             if (typeof inner.errorMsg === 'string' && inner.errorMsg.trim()) return inner.errorMsg;
             if (typeof inner.msg === 'string' && inner.msg.trim()) return inner.msg;
             if (typeof inner.message === 'string' && inner.message.trim()) return inner.message;
+            const deeper = inner.error;
+            if (deeper && typeof deeper === 'object') {
+                const leaf = deeper as Record<string, unknown>;
+                if (typeof leaf.errorMsg === 'string' && leaf.errorMsg.trim()) return leaf.errorMsg;
+                if (typeof leaf.message === 'string' && leaf.message.trim()) return leaf.message;
+            }
         }
         try {
             return JSON.stringify(err);
@@ -105,6 +111,39 @@ function stringifyVapiError(err: unknown): string {
         }
     }
     return String(err);
+}
+
+function vapiErrorHaystack(err: unknown): string {
+    const detail = stringifyVapiError(err);
+    try {
+        return `${detail} ${JSON.stringify(err)}`.toLowerCase();
+    } catch {
+        return detail.toLowerCase();
+    }
+}
+
+function isVapiWalletError(err: unknown): boolean {
+    const haystack = vapiErrorHaystack(err);
+    return (
+        haystack.includes('wallet balance') ||
+        haystack.includes('purchase more credits') ||
+        haystack.includes('upgrade your plan') ||
+        haystack.includes('insufficient credits') ||
+        haystack.includes('insufficient balance')
+    );
+}
+
+function formatVoiceTestError(err: unknown): string {
+    if (isVapiWalletError(err)) {
+        const balanceMatch = /wallet balance is\s*([-\d.]+)/i.exec(vapiErrorHaystack(err));
+        const balanceNote = balanceMatch?.[1] ? ` (current balance: ${balanceMatch[1]})` : '';
+        return `Vapi credits are empty${balanceNote}. Open dashboard.vapi.ai → Billing, add credits or upgrade your plan, then try Test Voice again. This is a Vapi billing limit — not a bug in LeadOps.`;
+    }
+    const detail = stringifyVapiError(err);
+    if (!detail || detail.startsWith('{')) {
+        return 'Voice test failed. Check microphone permission, Vapi credits, and try again.';
+    }
+    return `Voice test failed: ${detail}`;
 }
 
 /** Daily.co fires this when a web call hangs up — it is not a real failure. */
@@ -281,12 +320,7 @@ export const AICenter: React.FC = () => {
                 return;
             }
             console.error('Vapi Web SDK Error:', err);
-            const detail = stringifyVapiError(err);
-            setError(
-                detail
-                    ? `Voice test failed: ${detail}`
-                    : 'Voice test failed. Check microphone permission and try again.'
-            );
+            setError(formatVoiceTestError(err));
             setIsTestingVoice(false);
         };
 
@@ -640,7 +674,7 @@ export const AICenter: React.FC = () => {
                 setIsTestingVoice(false);
                 return;
             }
-            setError(e instanceof Error ? e.message : stringifyVapiError(e) || 'Failed to start voice test');
+            setError(formatVoiceTestError(e));
             setIsTestingVoice(false);
         }
     }, [isSaving, isTestingVoice, persistReceptionistAndVapi, vapiAssistantId]);
@@ -761,7 +795,17 @@ export const AICenter: React.FC = () => {
                         <div className="space-y-8 animate-fade-in max-w-3xl">
                             {(error || successMessage) && (
                                 <div className={`rounded-lg border p-3 text-sm ${error ? 'border-red-800 bg-red-900/20 text-red-300' : 'border-violet-800 bg-violet-900/20 text-violet-300'}`}>
-                                    {error ?? successMessage}
+                                    <p>{error ?? successMessage}</p>
+                                    {error?.includes('dashboard.vapi.ai') && (
+                                        <a
+                                            href="https://dashboard.vapi.ai/billing"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="mt-2 inline-flex items-center text-sm font-semibold text-violet-300 underline hover:text-violet-200"
+                                        >
+                                            Open Vapi Billing →
+                                        </a>
+                                    )}
                                 </div>
                             )}
                             <div className="flex items-center justify-between">
@@ -1195,6 +1239,19 @@ export const AICenter: React.FC = () => {
                                             {(error || successMessage) && (
                                                 <span className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${error ? 'border-red-800 bg-red-900/20 text-red-300' : 'border-violet-800 bg-violet-900/20 text-violet-300'}`}>
                                                     {error ?? successMessage}
+                                                    {error?.includes('dashboard.vapi.ai') && (
+                                                        <>
+                                                            {' '}
+                                                            <a
+                                                                href="https://dashboard.vapi.ai/billing"
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="underline hover:text-violet-200"
+                                                            >
+                                                                Billing →
+                                                            </a>
+                                                        </>
+                                                    )}
                                                 </span>
                                             )}
                                         </div>
