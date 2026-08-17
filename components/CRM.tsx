@@ -1168,7 +1168,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
               </button>
             </div>
 
-            <form onSubmit={handleCreateContact} className="p-6 space-y-4">
+            <form onSubmit={handleCreateContact} noValidate className="p-6 space-y-4">
               {formError && <p className="text-sm font-medium text-red-500">{formError}</p>}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -1198,7 +1198,10 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                 <label htmlFor="new-contact-email" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Email</label>
                 <input
                   id="new-contact-email"
-                  type="email"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
                   value={newContact.email}
                   onChange={e => setNewContact({ ...newContact, email: e.target.value })}
                   className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"

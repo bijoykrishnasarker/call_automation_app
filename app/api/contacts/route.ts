@@ -8,15 +8,7 @@ import {
 } from '@/lib/ai-receptionist/supabase-errors';
 
 const GENERIC_ERROR_MESSAGE = 'An unexpected error occurred. Please try again.';
-/** Safe to omit when a column is missing from an older schema. */
-const STRIPPABLE_OPTIONAL_COLUMNS = new Set([
-  'primary_phone',
-  'middle_name',
-  'mobile_phone',
-  'job_title',
-  'canonical_created_at',
-  'last_canonical_event_at',
-]);
+const PROTECTED_CONTACT_COLUMNS = new Set(['user_id', 'first_name']);
 
 function getAccessToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization');
@@ -39,11 +31,23 @@ async function insertContactRow(
     if (!error) return { data: null, error: { message: 'Failed to save contact' } };
 
     const missing = missingColumnName(error);
-    if (missing && missing in current && STRIPPABLE_OPTIONAL_COLUMNS.has(missing)) {
+    if (missing && missing in current && !PROTECTED_CONTACT_COLUMNS.has(missing)) {
       const next = { ...current };
       delete next[missing];
       current = next;
       continue;
+    }
+
+    if (isMissingColumnError(error)) {
+      const optionalKey = Object.keys(current).find(
+        (key) => !PROTECTED_CONTACT_COLUMNS.has(key) && key !== 'last_name' && key !== 'email'
+      );
+      if (optionalKey) {
+        const next = { ...current };
+        delete next[optionalKey];
+        current = next;
+        continue;
+      }
     }
 
     return { data: null, error };
