@@ -102,6 +102,10 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
   ];
 
   useEffect(() => {
+    onClearContactsError?.();
+  }, [onClearContactsError]);
+
+  useEffect(() => {
     if (!selectedContact || isEditingInfo) return;
     const latest = contacts.find(c => c.id === selectedContact.id);
     if (latest) setSelectedContact(latest);

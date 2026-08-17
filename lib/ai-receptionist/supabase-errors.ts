@@ -36,8 +36,9 @@ export function friendlyContactWriteError(error: { code?: string; message?: stri
   const code = String(error.code ?? '');
   const msg = (error.message ?? '').toLowerCase();
   if (code === '23502' || msg.includes('not-null') || msg.includes('null value')) {
+    if (msg.includes('external_contact_id')) return 'Contact save failed. Refresh the page and try again.';
     if (msg.includes('organization_id')) return 'Finish account setup before adding contacts.';
-    return 'A required field is missing. Check the form and try again.';
+    return `Database rejected this contact: ${error.message ?? 'missing required field'}`;
   }
   if (code === '23505' || msg.includes('duplicate') || msg.includes('unique')) {
     return 'A contact with this information already exists.';

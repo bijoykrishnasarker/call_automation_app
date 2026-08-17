@@ -100,7 +100,7 @@ function contactToPayload(contact: Partial<Contact>): Record<string, unknown> {
   };
 }
 
-const PROTECTED_CONTACT_COLUMNS = new Set(['user_id', 'first_name']);
+const PROTECTED_CONTACT_COLUMNS = new Set(['user_id', 'first_name', 'external_contact_id']);
 
 async function getOrganizationId(userId: string): Promise<string | null> {
   const { data } = await supabase
@@ -142,7 +142,7 @@ function buildContactInsertPayload(
 async function insertContactRecord(payload: Record<string, unknown>): Promise<ContactRow> {
   let current = { ...payload };
 
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     const { data, error } = await supabase.from('contacts').insert(current).select('*').single();
     if (!error && data) return data as ContactRow;
     if (!error) break;
@@ -153,18 +153,6 @@ async function insertContactRecord(payload: Record<string, unknown>): Promise<Co
       delete next[missing];
       current = next;
       continue;
-    }
-
-    if (isMissingColumnError(error)) {
-      const optionalKey = Object.keys(current).find(
-        (key) => !PROTECTED_CONTACT_COLUMNS.has(key) && key !== 'last_name' && key !== 'email'
-      );
-      if (optionalKey) {
-        const next = { ...current };
-        delete next[optionalKey];
-        current = next;
-        continue;
-      }
     }
 
     throw new Error(friendlyContactWriteError(error));

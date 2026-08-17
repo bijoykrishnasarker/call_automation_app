@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseClientForUser } from '@/lib/supabase/server';
+import { createSupabaseClientForUser, createSupabaseServiceClient } from '@/lib/supabase/server';
 import { ensureOrganizationForUser } from '@/lib/supabase/ensure-organization';
 import {
   friendlyContactWriteError,
@@ -8,7 +8,7 @@ import {
 } from '@/lib/ai-receptionist/supabase-errors';
 
 const GENERIC_ERROR_MESSAGE = 'An unexpected error occurred. Please try again.';
-const PROTECTED_CONTACT_COLUMNS = new Set(['user_id', 'first_name']);
+const PROTECTED_CONTACT_COLUMNS = new Set(['user_id', 'first_name', 'external_contact_id']);
 
 function getAccessToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization');
@@ -25,7 +25,7 @@ async function insertContactRow(
   payload: Record<string, unknown>
 ) {
   let current = { ...payload };
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     const { data, error } = await supabase.from('contacts').insert(current).select('*').single();
     if (!error && data) return { data, error: null };
     if (!error) return { data: null, error: { message: 'Failed to save contact' } };
@@ -38,21 +38,19 @@ async function insertContactRow(
       continue;
     }
 
-    if (isMissingColumnError(error)) {
-      const optionalKey = Object.keys(current).find(
-        (key) => !PROTECTED_CONTACT_COLUMNS.has(key) && key !== 'last_name' && key !== 'email'
-      );
-      if (optionalKey) {
-        const next = { ...current };
-        delete next[optionalKey];
-        current = next;
-        continue;
-      }
-    }
-
     return { data: null, error };
   }
   return { data: null, error: { message: 'Failed to save contact' } };
+}
+
+async function insertContactWithServiceRole(payload: Record<string, unknown>) {
+  try {
+    const admin = createSupabaseServiceClient();
+    return await insertContactRow(admin as ReturnType<typeof createSupabaseClientForUser>, payload);
+  } catch (err) {
+    console.warn('[POST /api/contacts] service role unavailable', err);
+    return { data: null, error: { message: 'Server configuration error' } };
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -97,6 +95,16 @@ export async function POST(request: NextRequest) {
     .eq('id', user.id)
     .maybeSingle();
   let organizationId = typeof profile?.organization_id === 'string' ? profile.organization_id : null;
+  if (!organizationId) {
+    const { data: sampleContact } = await supabase
+      .from('contacts')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .not('organization_id', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    organizationId = typeof sampleContact?.organization_id === 'string' ? sampleContact.organization_id : null;
+  }
   if (!organizationId) {
     organizationId = await ensureOrganizationForUser(
       supabase,
@@ -143,6 +151,12 @@ export async function POST(request: NextRequest) {
       error = retry.error;
     }
   }
+  if (error || !data) {
+    const service = await insertContactWithServiceRole(payload);
+    data = service.data;
+    error = service.error;
+  }
+
   if (error || !data) {
     console.error('[POST /api/contacts]', error);
     return NextResponse.json(
