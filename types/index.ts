@@ -116,7 +116,7 @@ export interface Message {
   text: string;
   createdAt: Date;
   direction: 'inbound' | 'outbound';
-  channel: 'sms' | 'email' | 'facebook' | 'instagram' | 'whatsapp' | 'tiktok';
+  channel: 'sms' | 'email' | 'facebook' | 'instagram' | 'whatsapp' | 'tiktok' | 'call';
   read: boolean;
 }
 

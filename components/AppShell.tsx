@@ -5,9 +5,10 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useApp } from '@/contexts/AppContext';
 import { PageContainer } from './PageContainer';
 import { Sidebar } from './Sidebar';
+import { ThemeToggle } from './ThemeToggle';
 import { NavigationItem, Notification } from '@/types';
 import {
-    Bell, Search, Sun, CheckCircle, AlertCircle, Info, Menu, X,
+    Bell, Search, CheckCircle, AlertCircle, Info, Menu, X,
     LayoutDashboard, Users, KanbanSquare, CalendarDays, GitBranch, Bot,
     Star, Inbox, Megaphone, Settings as SettingsIcon,
 } from 'lucide-react';
@@ -56,10 +57,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const notificationRef = useRef<HTMLDivElement>(null);
     const desktopSearchRef = useRef<HTMLDivElement>(null);
     const mobileSearchRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        document.documentElement.classList.add('dark');
-    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -207,7 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                 </div>
                             )}
                             <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-white">
+                                <p className="truncate text-sm font-bold text-[var(--app-text)]">
                                     {result.type === 'nav' ? result.label : `${result.firstName} ${result.lastName}`}
                                 </p>
                                 <p className="text-[10px] uppercase tracking-wider text-zinc-500">
@@ -222,10 +219,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
 
     return (
-        <div className={`enterprise-surface min-h-dvh font-sans text-zinc-100 transition-colors duration-300 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]`}>
+        <div className="enterprise-surface min-h-dvh font-sans text-[var(--app-text)] transition-colors duration-300 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
             <a href="#main-content" className="skip-link">Skip to main content</a>
 
-            <div className="hidden lg:block lg:sticky lg:top-0 lg:h-dvh lg:border-r lg:border-white/[0.06] lg:bg-[#0B0C0E]">
+            <div className="hidden lg:block lg:sticky lg:top-0 lg:h-dvh lg:border-r lg:border-[var(--app-border)] lg:bg-[var(--app-bg)]">
                 <Sidebar />
             </div>
 
@@ -241,9 +238,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="mobile-nav-title"
-                        className="relative h-dvh w-[min(20rem,85vw)] overflow-hidden border-r border-white/[0.06] bg-[#0B0C0E] shadow-2xl"
+                        className="relative h-dvh w-[min(20rem,85vw)] overflow-hidden border-r border-[var(--app-border)] bg-[var(--app-bg)] shadow-2xl"
                     >
-                        <div className="flex items-center justify-end border-b border-white/[0.06] p-3">
+                        <div className="flex items-center justify-end border-b border-[var(--app-border)] p-3">
                             <button
                                 type="button"
                                 onClick={() => setMobileNavOpen(false)}
@@ -258,8 +255,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
             )}
 
-            <div className="enterprise-surface flex min-h-dvh min-w-0 flex-col bg-[#0B0C0E]">
-                <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#0B0C0E]">
+            <div className="enterprise-surface flex min-h-dvh min-w-0 flex-col bg-[var(--app-bg)]">
+                <header className="sticky top-0 z-30 border-b border-[var(--app-border)] bg-[var(--app-bg)]">
                     <div className="grid min-h-[64px] grid-cols-[1fr_minmax(0,36rem)_1fr] items-center gap-3 px-4 sm:px-6 lg:px-8">
                         <div className="flex min-w-0 items-center gap-3 justify-self-start">
                             <button
@@ -270,7 +267,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             >
                                 <Menu className="h-5 w-5" />
                             </button>
-                            <h1 className="truncate text-[22px] font-bold tracking-tight text-white">{pageTitle}</h1>
+                            <h1 className="truncate text-[22px] font-bold tracking-tight text-[var(--app-text)]">{pageTitle}</h1>
                         </div>
 
                         <div className="hidden w-full md:block">
@@ -288,13 +285,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             >
                                 <Search className="h-4 w-4" />
                             </button>
-                            <button
-                                type="button"
-                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-[#121214] text-zinc-400 hover:text-zinc-200"
-                                aria-label="Theme"
-                            >
-                                <Sun className="h-4 w-4" />
-                            </button>
+                            <ThemeToggle />
                             <div className="relative" ref={notificationRef}>
                                 <button
                                     type="button"
@@ -309,9 +300,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                     )}
                                 </button>
                                 {showNotifications && (
-                                    <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/[0.08] bg-[#141416] shadow-xl shadow-black/50">
-                                        <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#111214] p-3">
-                                            <h2 className="text-sm font-bold text-white">Notifications</h2>
+                                    <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-card)] shadow-xl">
+                                        <div className="flex items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)] p-3">
+                                            <h2 className="text-sm font-bold text-[var(--app-text)]">Notifications</h2>
                                             <span className="text-xs text-zinc-500">{unreadCount} unread</span>
                                         </div>
                                         <div className="surface-scroll max-h-80 overflow-y-auto">
@@ -329,7 +320,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                                             {n.type === 'alert' ? <AlertCircle className="h-4 w-4" /> : n.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
                                                         </div>
                                                         <div className="min-w-0 flex-1">
-                                                            <p className={`text-sm ${!n.read ? 'font-bold text-white' : 'font-medium text-zinc-300'}`}>{n.title}</p>
+                                                            <p className={`text-sm ${!n.read ? 'font-bold text-[var(--app-text)]' : 'font-medium text-zinc-600 dark:text-zinc-300'}`}>{n.title}</p>
                                                             <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{n.message}</p>
                                                             <p className="mt-1 text-[10px] text-zinc-600">{n.time}</p>
                                                         </div>

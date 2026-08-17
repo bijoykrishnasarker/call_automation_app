@@ -82,7 +82,7 @@ export async function addStage(
     .eq('pipeline_id', pipelineId)
     .order('position', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const position = (maxPos?.position ?? -1) + 1;
 

@@ -38,14 +38,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', mobile = false
   };
 
   return (
-    <aside className={`flex h-full w-full flex-col bg-[#0B0C0E] ${className}`.trim()}>
+    <aside className={`flex h-full w-full flex-col bg-[var(--app-bg)] ${className}`.trim()}>
       <div className="select-none px-5 pb-5 pt-6">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/20 ring-1 ring-violet-500/30">
             <Bot className="h-5 w-5 text-violet-400" strokeWidth={2} />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-bold tracking-tight text-white">
+            <p className="truncate text-[15px] font-bold tracking-tight text-[var(--app-text)]">
               LeadOps<span className="text-violet-400">AI</span>
             </p>
             <p className="text-[11px] font-medium text-zinc-500">Enterprise Suite</p>
@@ -68,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', mobile = false
               className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors duration-150 ${
                 isActive
                   ? 'bg-violet-500 text-white shadow-sm shadow-violet-500/25'
-                  : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+                  : 'text-zinc-400 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]'
               }`}
             >
               <Icon
@@ -81,21 +81,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', mobile = false
         })}
       </nav>
 
-      <div className="mt-auto border-t border-white/[0.06] p-3 space-y-2">
+      <div className="mt-auto border-t border-[var(--app-border)] p-3 space-y-2">
         <button
           type="button"
           onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-zinc-400 transition-colors hover:bg-white/[0.04] hover:text-zinc-200"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-zinc-400 transition-colors hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
         >
           <LogOut className="h-[18px] w-[18px] text-zinc-500" strokeWidth={2} />
           Sign Out
         </button>
-        <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#141416] px-3 py-2.5">
+        <div className="flex items-center gap-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-card)] px-3 py-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-xs font-bold text-violet-300">
             {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+            <p className="truncate text-sm font-semibold text-[var(--app-text)]">{displayName}</p>
             <p className="truncate text-[11px] text-zinc-500">Pro Plan</p>
           </div>
         </div>

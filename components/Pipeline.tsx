@@ -91,7 +91,10 @@ export const Pipeline: React.FC = () => {
 
     const [activePipelineId, setActivePipelineId] = useState<string>('');
     const [isEditMode, setIsEditMode] = useState(false);
+    const [isEditStagesOpen, setIsEditStagesOpen] = useState(false);
     const [newStageName, setNewStageName] = useState('');
+    const [stageSaveError, setStageSaveError] = useState<string | null>(null);
+    const [isSavingStage, setIsSavingStage] = useState(false);
     const [showPipelineSelector, setShowPipelineSelector] = useState(false);
     const [isEditingTemplates, setIsEditingTemplates] = useState(false);
 
@@ -304,11 +307,19 @@ export const Pipeline: React.FC = () => {
     };
 
     const handleAddStage = async () => {
-        if (!newStageName.trim() || !activePipelineId) return;
+        if (!newStageName.trim() || !activePipelineId || isSavingStage) return;
         const colors = ['bg-blue-500', 'bg-orange-500', 'bg-violet-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500'];
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        setIsSavingStage(true);
+        setStageSaveError(null);
         const created = await addStage(activePipelineId, { name: newStageName.trim(), color: randomColor });
-        if (created) setNewStageName('');
+        setIsSavingStage(false);
+        if (created) {
+            setNewStageName('');
+            setIsEditMode(true);
+        } else {
+            setStageSaveError('Could not add this stage. Try again.');
+        }
     };
 
     const toggleAutomation = async (stageId: string) => {
@@ -343,7 +354,7 @@ export const Pipeline: React.FC = () => {
     const hasPipelines = pipelines.length > 0;
     const dealCount = activeDeals.length;
     const dealValue = activeDeals.reduce((sum, d) => sum + d.value, 0);
-    const showBoard = hasPipelines && activeStages.length > 0 && (isEditMode || dealCount > 0);
+    const showBoard = hasPipelines && (isEditMode || isEditStagesOpen || activeStages.length > 0);
 
     const openNewDeal = () => {
         if (!hasPipelines) {
@@ -358,7 +369,14 @@ export const Pipeline: React.FC = () => {
             handleOpenCreatePipeline();
             return;
         }
-        setIsEditMode((value) => !value);
+        if (isEditMode || isEditStagesOpen) {
+            setIsEditMode(false);
+            setIsEditStagesOpen(false);
+            return;
+        }
+        setIsEditMode(true);
+        setIsEditStagesOpen(true);
+        setStageSaveError(null);
     };
 
     if (!hasPipelines) {
@@ -586,9 +604,10 @@ export const Pipeline: React.FC = () => {
 
                 <div className="flex gap-2">
                     <button
-                        onClick={() => setIsEditMode(!isEditMode)}
+                        type="button"
+                        onClick={openEditStages}
                         className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all active:scale-95
-                ${isEditMode
+                ${isEditMode || isEditStagesOpen
                                 ? 'border-violet-500/30 bg-violet-500/15 text-violet-300'
                                 : 'border-zinc-800 bg-[#141416] text-zinc-200 hover:bg-white/[0.04]'}`}
                     >
@@ -605,7 +624,16 @@ export const Pipeline: React.FC = () => {
             </div>
 
             {!showBoard ? (
-                <div className="flex-1 bg-[#0B0C0E]" />
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                    <p className="text-sm text-zinc-400">This pipeline has no stages yet.</p>
+                    <button
+                        type="button"
+                        onClick={openEditStages}
+                        className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400"
+                    >
+                        <Settings className="h-4 w-4" /> Edit Stages
+                    </button>
+                </div>
             ) : isCompactLayout ? (
                 <div className="surface-scroll flex-1 overflow-y-auto pb-4 pr-1 space-y-4">
                     {activeStages.map(stage => {
@@ -827,6 +855,81 @@ export const Pipeline: React.FC = () => {
                     <div className="w-4 flex-shrink-0"></div>
                 </div>
             </div>
+            )}
+
+            {/* Edit Stages Modal */}
+            {isEditStagesOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in">
+                    <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+                            <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                                <Settings className="h-4 w-4 text-violet-600" /> Edit Stages
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setIsEditStagesOpen(false)}
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                aria-label="Close edit stages"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="space-y-3 overflow-y-auto p-4">
+                            {activeStages.length === 0 && (
+                                <p className="text-sm text-slate-500">No stages yet. Add your first stage below.</p>
+                            )}
+                            {activeStages.map((stage) => (
+                                <div key={stage.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950">
+                                    <div className={`h-3 w-3 shrink-0 rounded-full ${stage.color}`} />
+                                    <input
+                                        defaultValue={stage.name}
+                                        onBlur={(e) => {
+                                            const name = e.target.value.trim();
+                                            if (name && name !== stage.name) void handleStageNameChange(stage.id, name);
+                                        }}
+                                        className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleDeleteStage(stage.id)}
+                                        className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        aria-label={`Delete ${stage.name}`}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            ))}
+                            <div className="flex gap-2 pt-2">
+                                <input
+                                    type="text"
+                                    placeholder="New stage name..."
+                                    value={newStageName}
+                                    onChange={(e) => setNewStageName(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && void handleAddStage()}
+                                    className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => void handleAddStage()}
+                                    disabled={!newStageName.trim() || isSavingStage}
+                                    className="rounded-lg bg-violet-500 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-400 disabled:opacity-50"
+                                >
+                                    {isSavingStage ? 'Adding…' : 'Add'}
+                                </button>
+                            </div>
+                            {stageSaveError && <p className="text-sm font-medium text-red-500">{stageSaveError}</p>}
+                        </div>
+                        <div className="flex justify-end border-t border-slate-100 p-4 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setIsEditStagesOpen(false)}
+                                className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Add Deal Modal */}

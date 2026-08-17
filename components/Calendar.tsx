@@ -1,15 +1,37 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Appointment } from '@/types';
+import { Appointment, Contact } from '@/types';
 import {
+    calendarCellDateKey,
+    dateTimeFromWallClock,
     formatTimeInZone,
+    getZonedDateKey,
     getZonedHourMinute,
     isSameCalendarDay,
+    wallClockFromInstant,
 } from '@/lib/calendar/timezone';
 import { useApp } from '@/contexts/AppContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2, Loader2 } from 'lucide-react';
+
+function formatContactOption(contact: Contact): string {
+    const name = `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim();
+    const detail = (contact.email || contact.phone || '').trim();
+    if (name && detail) return `${name} (${detail})`;
+    return name || detail || 'Unnamed contact';
+}
+
+function emptyNewBooking(date = getZonedDateKey(new Date())) {
+    return {
+        title: '',
+        contactId: '',
+        date,
+        startTime: '09:00',
+        endTime: '10:00',
+        type: 'Service' as const,
+    };
+}
 
 export const Calendar: React.FC = () => {
     const { bookings: allBookings, bookingsLoading, bookingsError, contacts, addBooking, updateBooking, deleteBooking } = useApp();
@@ -22,14 +44,11 @@ export const Calendar: React.FC = () => {
     const [hoveredAppointmentId, setHoveredAppointmentId] = useState<string | null>(null);
     const [hoveredTooltipRect, setHoveredTooltipRect] = useState<{ left: number; top: number; width: number } | null>(null);
     const [editForm, setEditForm] = useState<{ title: string; contactId: string; date: string; startTime: string; endTime: string; type: Appointment['type']; status: Appointment['status'] } | null>(null);
-    const [newBooking, setNewBooking] = useState({
-        title: '',
-        contactId: '',
-        date: new Date().toISOString().split('T')[0],
-        startTime: '09:00',
-        endTime: '10:00',
-        type: 'Service' as const
-    });
+    const [newBooking, setNewBooking] = useState(emptyNewBooking);
+    const [bookingFormError, setBookingFormError] = useState<string | null>(null);
+    const [isSavingBooking, setIsSavingBooking] = useState(false);
+    const [editFormError, setEditFormError] = useState<string | null>(null);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
     const [calendarFilters, setCalendarFilters] = useState({
         consultation: true,
         followUp: true,
@@ -69,36 +88,74 @@ export const Calendar: React.FC = () => {
         setCurrentDate(new Date());
     };
 
+    const openNewBookingModal = (date?: Date) => {
+        setBookingFormError(null);
+        setNewBooking(emptyNewBooking(date ? calendarCellDateKey(date) : getZonedDateKey(new Date())));
+        setIsModalOpen(true);
+    };
+
     const handleSaveBooking = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newBooking.contactId || !newBooking.title) return;
-        const startAt = new Date(`${newBooking.date}T${newBooking.startTime}`);
-        const endAt = new Date(`${newBooking.date}T${newBooking.endTime}`);
-        const created = await addBooking({
-            contactId: newBooking.contactId,
-            title: newBooking.title,
-            startAt,
-            endAt,
-            type: newBooking.type,
-            status: 'Pending',
-        });
-        if (created) {
+        if (isSavingBooking) return;
+        setBookingFormError(null);
+
+        const title = newBooking.title.trim();
+        if (!title) {
+            setBookingFormError('Enter a title.');
+            return;
+        }
+        if (!newBooking.contactId) {
+            setBookingFormError('Select a contact from your CRM.');
+            return;
+        }
+
+        let startAt: Date;
+        let endAt: Date;
+        try {
+            startAt = dateTimeFromWallClock(newBooking.date, newBooking.startTime);
+            endAt = dateTimeFromWallClock(newBooking.date, newBooking.endTime);
+        } catch (err) {
+            setBookingFormError(err instanceof Error ? err.message : 'Enter a valid date and time.');
+            return;
+        }
+        if (endAt.getTime() <= startAt.getTime()) {
+            endAt = new Date(startAt.getTime() + 60 * 60 * 1000);
+        }
+
+        setIsSavingBooking(true);
+        try {
+            const created = await addBooking({
+                contactId: newBooking.contactId,
+                title,
+                startAt,
+                endAt,
+                type: newBooking.type,
+                status: 'Pending',
+            });
+            if (!created) {
+                setBookingFormError('Failed to create booking. Try again.');
+                return;
+            }
             setIsModalOpen(false);
-            setNewBooking(prev => ({ ...prev, title: '', contactId: '' }));
+            setNewBooking(emptyNewBooking());
+        } catch (err) {
+            setBookingFormError(err instanceof Error ? err.message : 'Failed to create booking.');
+        } finally {
+            setIsSavingBooking(false);
         }
     };
 
     const openEventDetail = (appt: Appointment) => {
         setSelectedAppointment(appt);
-        const dateStr = appt.start.toISOString().slice(0, 10);
-        const startTime = appt.start.toTimeString().slice(0, 5);
-        const endTime = appt.end.toTimeString().slice(0, 5);
+        setEditFormError(null);
+        const startClock = wallClockFromInstant(appt.start);
+        const endClock = wallClockFromInstant(appt.end);
         setEditForm({
             title: appt.title,
             contactId: appt.contactId ?? '',
-            date: dateStr,
-            startTime,
-            endTime,
+            date: startClock.date,
+            startTime: startClock.time,
+            endTime: endClock.time,
             type: appt.type,
             status: appt.status,
         });
@@ -106,12 +163,34 @@ export const Calendar: React.FC = () => {
 
     const handleSaveEdit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedAppointment || !editForm || !editForm.contactId || !editForm.title) return;
-        const start = new Date(`${editForm.date}T${editForm.startTime}`);
-        const end = new Date(`${editForm.date}T${editForm.endTime}`);
+        if (!selectedAppointment || !editForm || isSavingEdit) return;
+        setEditFormError(null);
+        if (!editForm.title.trim()) {
+            setEditFormError('Enter a title.');
+            return;
+        }
+        if (!editForm.contactId) {
+            setEditFormError('Select a contact from your CRM.');
+            return;
+        }
+
+        let start: Date;
+        let end: Date;
+        try {
+            start = dateTimeFromWallClock(editForm.date, editForm.startTime);
+            end = dateTimeFromWallClock(editForm.date, editForm.endTime);
+        } catch (err) {
+            setEditFormError(err instanceof Error ? err.message : 'Enter a valid date and time.');
+            return;
+        }
+        if (end.getTime() <= start.getTime()) {
+            end = new Date(start.getTime() + 60 * 60 * 1000);
+        }
+
+        setIsSavingEdit(true);
         try {
             await updateBooking(selectedAppointment.id, {
-                title: editForm.title,
+                title: editForm.title.trim(),
                 contactId: editForm.contactId,
                 start,
                 end,
@@ -120,20 +199,26 @@ export const Calendar: React.FC = () => {
             });
             setSelectedAppointment(null);
             setEditForm(null);
-        } catch {
-            // error in context
+        } catch (err) {
+            setEditFormError(err instanceof Error ? err.message : 'Failed to save booking.');
+        } finally {
+            setIsSavingEdit(false);
         }
     };
 
     const handleDeleteBooking = async () => {
-        if (!selectedAppointment) return;
+        if (!selectedAppointment || isSavingEdit) return;
         if (!confirm('Delete this booking?')) return;
+        setEditFormError(null);
+        setIsSavingEdit(true);
         try {
             await deleteBooking(selectedAppointment.id);
             setSelectedAppointment(null);
             setEditForm(null);
-        } catch {
-            // error in context
+        } catch (err) {
+            setEditFormError(err instanceof Error ? err.message : 'Failed to delete booking.');
+        } finally {
+            setIsSavingEdit(false);
         }
     };
 
@@ -311,8 +396,7 @@ export const Calendar: React.FC = () => {
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setNewBooking(prev => ({ ...prev, date: day.toISOString().split('T')[0] }));
-                                            setIsModalOpen(true);
+                                            openNewBookingModal(day);
                                         }}
                                         className="rounded p-1 text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 group-hover:opacity-100"
                                     >
@@ -537,10 +621,7 @@ export const Calendar: React.FC = () => {
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                setNewBooking(prev => ({ ...prev, date: day.toISOString().split('T')[0] }));
-                                                setIsModalOpen(true);
-                                            }}
+                                            onClick={() => openNewBookingModal(day)}
                                             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                                         >
                                             <Plus className="h-4 w-4" />
@@ -670,16 +751,13 @@ export const Calendar: React.FC = () => {
         );
     }
 
-    if (bookingsError) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <p className="text-sm text-red-600 dark:text-red-400">{bookingsError}</p>
-            </div>
-        );
-    }
-
     return (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
+            {bookingsError && (
+                <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+                    {bookingsError}
+                </div>
+            )}
             <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-[#1F1F23] bg-[#0B0C0E]">
                 <aside className="hidden w-64 shrink-0 flex-col border-r border-[#1F1F23] p-4 lg:flex">
                     {renderMiniCalendar()}
@@ -703,7 +781,7 @@ export const Calendar: React.FC = () => {
                     </div>
                     <button
                         type="button"
-                        onClick={() => setIsModalOpen(true)}
+                        onClick={() => openNewBookingModal()}
                         className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-[#A78BFA] px-4 py-2.5 text-sm font-semibold text-zinc-950 transition-colors hover:bg-violet-300"
                     >
                         <Plus className="h-4 w-4" />
@@ -753,7 +831,7 @@ export const Calendar: React.FC = () => {
                         </div>
                         <button
                             type="button"
-                            onClick={() => setIsModalOpen(true)}
+                            onClick={() => openNewBookingModal()}
                             className="flex items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[#A78BFA] px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-violet-300 lg:hidden"
                         >
                             <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Appointment</span><span className="sm:hidden">New</span>
@@ -835,7 +913,7 @@ export const Calendar: React.FC = () => {
                                     <option value="">Select a contact...</option>
                                     {contacts.map(contact => (
                                         <option key={contact.id} value={contact.id}>
-                                            {contact.firstName} {contact.lastName} ({contact.email})
+                                            {formatContactOption(contact)}
                                         </option>
                                     ))}
                                 </select>
@@ -910,26 +988,36 @@ export const Calendar: React.FC = () => {
                                 </div>
                             </div>
 
+                            </div>
+
+                            {editFormError && (
+                                <p className="text-sm font-medium text-red-500">{editFormError}</p>
+                            )}
+
                             <div className="pt-4 flex gap-3">
                                 <button
                                     type="button"
                                     onClick={handleDeleteBooking}
-                                    className="flex items-center justify-center gap-2 py-2.5 px-4 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    disabled={isSavingEdit}
+                                    className="flex items-center justify-center gap-2 py-2.5 px-4 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
                                 >
                                     <Trash2 className="w-4 h-4" /> Delete
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => { setSelectedAppointment(null); setEditForm(null); }}
-                                    className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    onClick={() => { if (!isSavingEdit) { setSelectedAppointment(null); setEditForm(null); } }}
+                                    disabled={isSavingEdit}
+                                    className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm"
+                                    disabled={isSavingEdit}
+                                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm disabled:opacity-50"
                                 >
-                                    Save changes
+                                    {isSavingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                    {isSavingEdit ? 'Saving…' : 'Save changes'}
                                 </button>
                             </div>
                         </form>
@@ -945,7 +1033,7 @@ export const Calendar: React.FC = () => {
                             <h3 id="new-booking-title" className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                                 <CalendarIcon className="w-4 h-4 text-violet-600" /> New Appointment
                             </h3>
-                            <button onClick={() => setIsModalOpen(false)} aria-label="Close new appointment dialog" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <button onClick={() => !isSavingBooking && setIsModalOpen(false)} disabled={isSavingBooking} aria-label="Close new appointment dialog" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-50">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -976,7 +1064,7 @@ export const Calendar: React.FC = () => {
                                     <option value="">Select a contact...</option>
                                     {contacts.map(contact => (
                                         <option key={contact.id} value={contact.id}>
-                                            {contact.firstName} {contact.lastName} ({contact.email})
+                                            {formatContactOption(contact)}
                                         </option>
                                     ))}
                                 </select>
@@ -1034,25 +1122,37 @@ export const Calendar: React.FC = () => {
                                 </div>
                             </div>
 
+                            </div>
+
+                            {contacts.length === 0 && (
+                                <p className="text-sm text-amber-500">Add a contact in CRM before creating a booking.</p>
+                            )}
+                            {bookingFormError && (
+                                <p className="text-sm font-medium text-red-500">{bookingFormError}</p>
+                            )}
+
                             <div className="pt-4 flex gap-3">
                                 <button
                                     type="button"
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    onClick={() => !isSavingBooking && setIsModalOpen(false)}
+                                    disabled={isSavingBooking}
+                                    className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm"
+                                    disabled={isSavingBooking || contacts.length === 0}
+                                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm disabled:opacity-50"
                                 >
-                                    Create Booking
+                                    {isSavingBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                    {isSavingBooking ? 'Creating…' : 'Create Booking'}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-        </>
+        </div>
     );
 };

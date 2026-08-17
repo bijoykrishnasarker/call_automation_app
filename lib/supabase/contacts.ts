@@ -1,5 +1,6 @@
 import { Contact, ContactStatus, Note, Task } from '@/types';
 import { supabase } from '@/lib/supabase/client';
+import { isMissingColumnError } from '@/lib/ai-receptionist/supabase-errors';
 
 /** DB row shape (snake_case) */
 interface ContactRow {
@@ -73,12 +74,12 @@ export function rowToContact(row: ContactRow): Contact {
 }
 
 function contactToPayload(contact: Partial<Contact>): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    first_name: contact.firstName,
-    last_name: contact.lastName,
-    email: contact.email,
-    phone: contact.phone ?? '',
-    company: contact.company ?? null,
+  return {
+    first_name: contact.firstName?.trim() || 'Unknown',
+    last_name: contact.lastName?.trim() || '—',
+    email: contact.email?.trim() || '',
+    phone: contact.phone?.trim() ?? '',
+    company: contact.company?.trim() || null,
     status: contact.status ?? ContactStatus.NewLead,
     tags: contact.tags ?? [],
     source: contact.source ?? 'Manual Entry',
@@ -97,7 +98,6 @@ function contactToPayload(contact: Partial<Contact>): Record<string, unknown> {
         }))
       : [],
   };
-  return payload;
 }
 
 export async function fetchContacts(userId: string): Promise<Contact[]> {
@@ -107,39 +107,125 @@ export async function fetchContacts(userId: string): Promise<Contact[]> {
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Failed to load contacts');
   return (data ?? []).map(rowToContact);
 }
 
 export async function createContact(userId: string, contact: Omit<Contact, 'id'> | Contact): Promise<Contact> {
-  const payload = {
-    ...contactToPayload(contact),
-    user_id: userId,
-  };
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Sign in to add contacts.');
 
-  const { data, error } = await supabase.from('contacts').insert(payload).select('*').single();
-
-  if (error) throw error;
-  return rowToContact(data as ContactRow);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        email: contact.email,
+        phone: contact.phone,
+        company: contact.company,
+        status: contact.status,
+        tags: contact.tags,
+        source: contact.source,
+        lastActivity: contact.lastActivity,
+        notes: contact.notes,
+        tasks: Array.isArray(contact.tasks)
+          ? contact.tasks.map(t => ({
+              id: t.id,
+              title: t.title,
+              dueDate: t.dueDate instanceof Date ? t.dueDate.toISOString() : t.dueDate,
+              completed: t.completed,
+            }))
+          : [],
+        address: contact.address,
+        city: contact.city,
+        state: contact.state,
+        zip: contact.zip,
+      }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({})) as { contact?: ContactRow; message?: string };
+    if (!res.ok || !data.contact) {
+      throw new Error(data.message || 'Failed to add contact');
+    }
+    return rowToContact(data.contact);
+  } catch (err) {
+    if (
+      (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError')
+    ) {
+      throw new Error('Saving the contact took too long. Please try again.');
+    }
+    throw err instanceof Error ? err : new Error('Failed to add contact');
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function updateContact(userId: string, contact: Contact): Promise<Contact> {
   const payload = contactToPayload(contact);
-  delete (payload as Record<string, unknown>).user_id;
+  const phone = contact.phone?.trim() || '';
+  const withPhone = { ...payload, primary_phone: phone || null, updated_at: new Date().toISOString() };
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('contacts')
-    .update({ ...payload, updated_at: new Date().toISOString() })
+    .update(withPhone)
     .eq('id', contact.id)
     .eq('user_id', userId)
     .select('*')
     .single();
 
-  if (error) throw error;
+  if (error && isMissingColumnError(error)) {
+    const retry = await supabase
+      .from('contacts')
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq('id', contact.id)
+      .eq('user_id', userId)
+      .select('*')
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) throw new Error(error.message || 'Failed to update contact');
   return rowToContact(data as ContactRow);
 }
 
-export async function deleteContact(userId: string, contactId: string): Promise<void> {
-  const { error } = await supabase.from('contacts').delete().eq('id', contactId).eq('user_id', userId);
-  if (error) throw error;
+export async function deleteContact(_userId: string, contactId: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Sign in to delete contacts.');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const res = await fetch('/api/contacts', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ id: contactId }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({})) as { message?: string };
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to delete contact');
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('Delete took too long. Please try again.');
+    }
+    throw err instanceof Error ? err : new Error('Failed to delete contact');
+  } finally {
+    clearTimeout(timer);
+  }
 }

@@ -31,7 +31,7 @@ export function PageHeader({ title, subtitle, breadcrumbs, action }: PageHeaderP
             ))}
           </nav>
         )}
-        <h2 className="text-2xl font-bold tracking-tight text-white">{title}</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--app-text)]">{title}</h2>
         {subtitle && (
           <p className="mt-1 max-w-2xl text-sm text-zinc-500">{subtitle}</p>
         )}

@@ -13,11 +13,11 @@ import {
   Calendar,
   ShieldCheck,
   Sparkles,
-  Sun,
   Eye,
   EyeOff,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 type AuthMode = 'login' | 'signup' | 'forgot' | 'update-password';
 
@@ -207,13 +207,7 @@ export default function LoginPage() {
             LeadOps<span className="text-violet-400">AI</span>
           </span>
         </div>
-        <button
-          type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-[#111214] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
-          aria-label="Theme toggle"
-        >
-          <Sun className="h-4 w-4" />
-        </button>
+        <ThemeToggle className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-[#111214] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200" />
       </header>
 
       <main className="mx-auto flex min-h-[calc(100vh-4.5rem)] max-w-6xl flex-col items-center justify-center gap-10 px-6 py-10 md:flex-row md:items-center md:gap-16 md:px-10 lg:gap-20">

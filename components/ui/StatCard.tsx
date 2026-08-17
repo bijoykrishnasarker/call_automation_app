@@ -24,7 +24,7 @@ export function StatCard({
 }: StatCardProps) {
   return (
     <div
-      className="app-card group cursor-default animate-fade-in p-5 transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/40 hover:bg-[#1a1b1f] hover:shadow-lg hover:shadow-violet-500/10"
+      className="app-card group cursor-default animate-fade-in p-5 transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/40 hover:bg-zinc-50 hover:shadow-lg hover:shadow-violet-500/10 dark:hover:bg-[#1a1b1f]"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -32,7 +32,7 @@ export function StatCard({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
             {title}
           </p>
-          <p className="mt-2 text-3xl font-bold tracking-tight text-white">
+          <p className="mt-2 text-3xl font-bold tracking-tight text-[var(--app-text)]">
             {value}
           </p>
           {(trend || trendLabel) && (

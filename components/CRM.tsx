@@ -11,13 +11,14 @@ interface CRMProps {
   contacts: Contact[];
   contactsLoading?: boolean;
   contactsError?: string | null;
+  onClearContactsError?: () => void;
   onAddContact?: (contact: Contact) => void | Promise<Contact | null>;
   onUpdateContact?: (contact: Contact) => void | Promise<void>;
   onDeleteContact?: (contactId: string) => void | Promise<void>;
   actionRequest?: CRMActionRequest; // New Prop for Deep Linking
 }
 
-export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsError, onAddContact, onUpdateContact, onDeleteContact, actionRequest }) => {
+export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsError, onClearContactsError, onAddContact, onUpdateContact, onDeleteContact, actionRequest }) => {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -68,6 +69,10 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
   const [callNotes, setCallNotes] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [contactPendingDelete, setContactPendingDelete] = useState<Contact | null>(null);
+  const [isSavingContact, setIsSavingContact] = useState(false);
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const filteredContacts = contacts.filter(c => {
     const q = searchQuery.toLowerCase();
@@ -91,9 +96,16 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
     { id: ContactStatus.Lost, label: 'Lost', count: contacts.filter(c => c.status === ContactStatus.Lost).length },
   ];
 
+  useEffect(() => {
+    if (!selectedContact || isEditingInfo) return;
+    const latest = contacts.find(c => c.id === selectedContact.id);
+    if (latest) setSelectedContact(latest);
+  }, [contacts, selectedContact?.id, isEditingInfo]);
+
   const requestDeleteContact = (contact: Contact, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!onDeleteContact) return;
+    setDeleteError(null);
     setContactPendingDelete(contact);
   };
 
@@ -101,10 +113,13 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
     if (!contactPendingDelete || !onDeleteContact) return;
     const id = contactPendingDelete.id;
     setDeletingId(id);
+    setDeleteError(null);
     try {
       await Promise.resolve(onDeleteContact(id));
       setContactPendingDelete(null);
       setSelectedContact(prev => (prev?.id === id ? null : prev));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete contact');
     } finally {
       setDeletingId(null);
     }
@@ -122,15 +137,22 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
 
   const handleCreateContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onAddContact) return;
+    if (!onAddContact || isSavingContact) return;
+    if (!newContact.firstName.trim()) {
+      setFormError('First name is required.');
+      return;
+    }
+
+    setIsSavingContact(true);
+    setFormError(null);
 
     const contact: Contact = {
-      id: Date.now().toString(),
-      firstName: newContact.firstName,
-      lastName: newContact.lastName,
-      email: newContact.email,
-      phone: newContact.phone,
-      company: newContact.company,
+      id: crypto.randomUUID(),
+      firstName: newContact.firstName.trim(),
+      lastName: newContact.lastName.trim(),
+      email: newContact.email.trim(),
+      phone: newContact.phone.trim(),
+      company: newContact.company.trim(),
       status: newContact.status,
       tags: ['New'],
       lastActivity: 'Just now',
@@ -139,10 +161,20 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
       tasks: []
     };
 
-    const created = await onAddContact(contact);
-    setIsAddModalOpen(false);
-    setNewContact({ firstName: '', lastName: '', email: '', phone: '', company: '', status: ContactStatus.NewLead });
-    if (created) setSelectedContact(created);
+    try {
+      const created = await onAddContact(contact);
+      if (!created) {
+        setFormError('Could not save this contact. Check the details and try again.');
+        return;
+      }
+      setIsAddModalOpen(false);
+      setNewContact({ firstName: '', lastName: '', email: '', phone: '', company: '', status: ContactStatus.NewLead });
+      setSelectedContact(created);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not save this contact.');
+    } finally {
+      setIsSavingContact(false);
+    }
   };
 
   const updateContact = async (updates: Partial<Contact>) => {
@@ -157,18 +189,16 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
     fileInputRef.current?.click();
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !onAddContact) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const content = e.target?.result as string;
       const lines = content.split(/\r\n|\n/);
-      // Simple CSV Parse: Expects FirstName,LastName,Email,Phone,Company,Tags
-      // Skip header row if present
       let startIndex = 0;
-      if (lines[0].toLowerCase().includes('email') || lines[0].toLowerCase().includes('name')) {
+      if (lines[0]?.toLowerCase().includes('email') || lines[0]?.toLowerCase().includes('name')) {
         startIndex = 1;
       }
 
@@ -178,10 +208,10 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
         if (!line) continue;
 
         const cols = line.split(',');
-        if (cols.length < 3) continue; // Basic validation
+        if (cols.length < 3) continue;
 
         const newC: Contact = {
-          id: `import-${Date.now()}-${i}`,
+          id: crypto.randomUUID(),
           firstName: cols[0]?.trim() || 'Unknown',
           lastName: cols[1]?.trim() || '',
           email: cols[2]?.trim() || '',
@@ -194,13 +224,13 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
           notes: [],
           tasks: []
         };
-        onAddContact(newC);
-        count++;
+        const created = await onAddContact(newC).catch(() => null);
+        if (created) count++;
       }
-      alert(`Successfully imported ${count} contacts.`);
+      alert(count > 0 ? `Saved ${count} contacts.` : 'No contacts were imported.');
     };
     reader.readAsText(file);
-    if (event.target) event.target.value = ''; // Reset input
+    if (event.target) event.target.value = '';
   };
 
   // --- Task Handlers ---
@@ -239,9 +269,18 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
     setIsEditingInfo(true);
   };
 
-  const handleSaveInfo = () => {
-    updateContact(editedInfo);
-    setIsEditingInfo(false);
+  const handleSaveInfo = async () => {
+    if (!selectedContact || isSavingInfo) return;
+    setIsSavingInfo(true);
+    setFormError(null);
+    try {
+      await updateContact(editedInfo);
+      setIsEditingInfo(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not save contact details.');
+    } finally {
+      setIsSavingInfo(false);
+    }
   };
 
   // --- AI Handlers ---
@@ -266,8 +305,26 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
     setShowTemplates(false);
   };
 
-  const handleSaveCallLog = () => {
-    // In a real app we'd update parent state via onUpdateContact
+  const handleSaveCallLog = async () => {
+    if (!selectedContact) return;
+    const details = [
+      `Outcome: ${callOutcome}`,
+      callDuration.trim() ? `Duration: ${callDuration.trim()}` : null,
+      callNotes.trim() || null,
+    ].filter(Boolean).join('\n');
+    const note: Note = {
+      id: crypto.randomUUID(),
+      text: details || 'Call logged.',
+      createdAt: new Date().toISOString(),
+      type: 'call-log',
+    };
+    await updateContact({
+      notes: [...selectedContact.notes, note],
+      lastActivity: 'Just now',
+    });
+    setCallNotes('');
+    setCallDuration('');
+    setCallOutcome('Connected');
     setShowCallLog(false);
   };
 
@@ -365,15 +422,25 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
         />
       </div>
 
+      {contactsError && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+          <p>{contactsError}</p>
+          {onClearContactsError && (
+            <button
+              type="button"
+              onClick={onClearContactsError}
+              aria-label="Dismiss error"
+              className="rounded p-1 text-red-400 hover:bg-red-500/20 hover:text-red-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
     <div className="relative flex min-h-[70dvh] overflow-hidden lg:h-[calc(100dvh-14rem)]">
       {/* Hidden File Input */}
       <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-
-      {contactsError && (
-        <div className="absolute top-0 left-0 right-0 z-10 px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
-          {contactsError}
-        </div>
-      )}
 
       {contactsLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 app-card">
@@ -405,7 +472,11 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
               <span className="hidden sm:inline">Import CSV</span>
             </button>
             <button
-              onClick={() => setIsAddModalOpen(true)}
+              type="button"
+              onClick={() => {
+                setFormError(null);
+                setIsAddModalOpen(true);
+              }}
               className="flex items-center gap-2 px-4 py-2.5 bg-violet-500 text-white rounded-xl text-sm font-semibold hover:bg-violet-400 transition-all active:scale-95"
             >
               <Plus className="w-4 h-4" />
@@ -853,12 +924,29 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     <button onClick={handleStartEditInfo} className="text-xs text-violet-600 dark:text-violet-500 hover:underline">Edit Info</button>
                   ) : (
                     <div className="flex gap-2">
-                      <button onClick={() => setIsEditingInfo(false)} className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700">Cancel</button>
-                      <button onClick={handleSaveInfo} className="text-xs text-violet-600 dark:text-violet-500 font-bold hover:text-violet-700 flex items-center gap-1 active:scale-95 transition-transform"><Save className="w-3 h-3" /> Save</button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingInfo(false)}
+                        disabled={isSavingInfo}
+                        className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveInfo()}
+                        disabled={isSavingInfo}
+                        className="text-xs text-violet-600 dark:text-violet-500 font-bold hover:text-violet-700 flex items-center gap-1 active:scale-95 transition-transform disabled:opacity-50"
+                      >
+                        <Save className="w-3 h-3" /> {isSavingInfo ? 'Saving…' : 'Save'}
+                      </button>
                     </div>
                   )}
                 </div>
 
+                {isEditingInfo && formError && (
+                  <p className="text-sm font-medium text-red-400">{formError}</p>
+                )}
                 <div className="grid grid-cols-1 gap-4">
                   <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 transition-colors hover:border-slate-300">
                     <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> Email</label>
@@ -1020,6 +1108,9 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                     </span>{' '}
                     will be permanently removed. Related deals and appointments will also be deleted. This cannot be undone.
                   </p>
+                  {deleteError && (
+                    <p className="mt-2 text-sm font-medium text-red-500">{deleteError}</p>
+                  )}
                 </div>
               </div>
               <button
@@ -1075,6 +1166,7 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
             </div>
 
             <form onSubmit={handleCreateContact} className="p-6 space-y-4">
+              {formError && <p className="text-sm font-medium text-red-500">{formError}</p>}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="new-contact-first-name" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">First Name</label>
@@ -1091,7 +1183,6 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                   <label htmlFor="new-contact-last-name" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Last Name</label>
                   <input
                     id="new-contact-last-name"
-                    required
                     type="text"
                     value={newContact.lastName}
                     onChange={e => setNewContact({ ...newContact, lastName: e.target.value })}
@@ -1104,7 +1195,6 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                 <label htmlFor="new-contact-email" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Email</label>
                 <input
                   id="new-contact-email"
-                  required
                   type="email"
                   value={newContact.email}
                   onChange={e => setNewContact({ ...newContact, email: e.target.value })}
@@ -1117,7 +1207,6 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                   <label htmlFor="new-contact-phone" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Phone</label>
                   <input
                     id="new-contact-phone"
-                    required
                     type="tel"
                     value={newContact.phone}
                     onChange={e => setNewContact({ ...newContact, phone: e.target.value })}
@@ -1146,9 +1235,10 @@ export const CRM: React.FC<CRMProps> = ({ contacts, contactsLoading, contactsErr
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95"
+                  disabled={isSavingContact}
+                  className="flex-1 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm active:scale-95 disabled:opacity-60"
                 >
-                  Create Contact
+                  {isSavingContact ? 'Saving…' : 'Create Contact'}
                 </button>
               </div>
             </form>

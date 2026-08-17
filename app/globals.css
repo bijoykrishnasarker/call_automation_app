@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --page-max-width: 96rem;
@@ -10,12 +11,25 @@
   --brand: #8b5cf6;
   --brand-light: #a78bfa;
   --brand-muted: rgba(139, 92, 246, 0.12);
+  --app-bg: #f4f4f5;
+  --app-surface: #ffffff;
+  --app-card: #ffffff;
+  --app-border: rgba(24, 24, 27, 0.1);
+  --app-text: #18181b;
+  --app-muted: #71717a;
+  --app-input: #ffffff;
+  --app-hover: rgba(24, 24, 27, 0.04);
+}
+
+html.dark {
   --app-bg: #0b0c0e;
   --app-surface: #111214;
   --app-card: #141416;
   --app-border: rgba(255, 255, 255, 0.06);
   --app-text: #f4f4f5;
   --app-muted: #a1a1aa;
+  --app-input: #121214;
+  --app-hover: rgba(255, 255, 255, 0.04);
 }
 
 @media (min-width: 640px) {
@@ -36,6 +50,10 @@ body {
 }
 
 html {
+  color-scheme: light;
+}
+
+html.dark {
   color-scheme: dark;
 }
 
@@ -49,11 +67,19 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #d4d4d8;
   border-radius: 3px;
 }
 
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+}
+
 ::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
 }
 
@@ -119,6 +145,115 @@ iframe {
 
 .skip-link:focus {
   transform: translateY(0);
+}
+
+/* Light mode: remap hardcoded dark-only utility colors so existing pages stay readable. */
+html:not(.dark) .text-white {
+  color: var(--app-text);
+}
+
+html:not(.dark) .text-zinc-100,
+html:not(.dark) .text-zinc-200 {
+  color: #18181b;
+}
+
+html:not(.dark) .text-zinc-300 {
+  color: #27272a;
+}
+
+html:not(.dark) .text-zinc-400 {
+  color: #52525b;
+}
+
+html:not(.dark) .hover\:text-zinc-200:hover,
+html:not(.dark) .hover\:text-zinc-300:hover {
+  color: #18181b;
+}
+
+html:not(.dark) .bg-\[\#09090b\],
+html:not(.dark) .bg-\[\#0a0a0b\],
+html:not(.dark) .bg-\[\#0B0C0E\],
+html:not(.dark) .bg-\[\#0b0c0e\] {
+  background-color: var(--app-bg);
+}
+
+html:not(.dark) .bg-\[\#111214\],
+html:not(.dark) .bg-\[\#111113\],
+html:not(.dark) .bg-\[\#121214\],
+html:not(.dark) .bg-\[\#141416\],
+html:not(.dark) .bg-\[\#1a1b1f\] {
+  background-color: var(--app-card);
+}
+
+html:not(.dark) .bg-\[\#09090b\]\/95 {
+  background-color: rgb(244 244 245 / 0.95);
+}
+
+html:not(.dark) .bg-black {
+  background-color: #f4f4f5;
+}
+
+html:not(.dark) .bg-zinc-800,
+html:not(.dark) .bg-zinc-900,
+html:not(.dark) .bg-zinc-950 {
+  background-color: #f4f4f5;
+}
+
+html:not(.dark) .border-zinc-700,
+html:not(.dark) .border-zinc-800,
+html:not(.dark) .border-zinc-900,
+html:not(.dark) .border-\[\#1F1F23\] {
+  border-color: var(--app-border);
+}
+
+html:not(.dark) .border-white\/\[0\.06\],
+html:not(.dark) .border-white\/\[0\.08\],
+html:not(.dark) .border-white\/\[0\.1\],
+html:not(.dark) .ring-1.ring-white\/\[0\.06\] {
+  border-color: var(--app-border);
+}
+
+html:not(.dark) .hover\:bg-white\/\[0\.03\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.04\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.06\]:hover {
+  background-color: var(--app-hover);
+}
+
+html:not(.dark) .hover\:border-zinc-700:hover,
+html:not(.dark) .hover\:border-white\/\[0\.1\]:hover {
+  border-color: rgba(24, 24, 27, 0.16);
+}
+
+html:not(.dark) .placeholder\:text-zinc-600::placeholder,
+html:not(.dark) .placeholder\:text-zinc-500::placeholder {
+  color: #a1a1aa;
+}
+
+html:not(.dark) .shadow-black\/40,
+html:not(.dark) .shadow-black\/50,
+html:not(.dark) .shadow-2xl.shadow-black\/40 {
+  --tw-shadow-color: rgb(24 24 27 / 0.08);
+}
+
+html:not(.dark) .bg-violet-500.text-white,
+html:not(.dark) .bg-violet-600.text-white,
+html:not(.dark) .bg-violet-400.text-white,
+html:not(.dark) .bg-violet-500 .text-white,
+html:not(.dark) .bg-red-500.text-white,
+html:not(.dark) .bg-emerald-500.text-white,
+html:not(.dark) .bg-blue-500.text-white {
+  color: #fff;
+}
+
+html:not(.dark) .bg-violet-500,
+html:not(.dark) .bg-violet-600 {
+  color: #fff;
+}
+
+html:not(.dark) input,
+html:not(.dark) textarea,
+html:not(.dark) select {
+  color: var(--app-text);
 }
 
 .page-title {

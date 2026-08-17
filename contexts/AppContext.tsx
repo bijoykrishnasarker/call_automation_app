@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Contact, Notification, CRMActionRequest, Message, Pipeline, PipelineStage, Deal, Appointment } from '@/types';
 import { MOCK_MESSAGES, INITIAL_NOTIFICATIONS } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { fetchContacts, createContact, updateContact as updateContactApi, deleteContact as deleteContactApi } from '@/lib/supabase/contacts';
 import {
     fetchPipelinesWithStages,
@@ -12,7 +13,7 @@ import {
     updateStage as updateStageApi,
     deleteStage as deleteStageApi,
 } from '@/lib/supabase/pipelines';
-import { fetchDeals, createDeal as createDealApi, updateDeal as updateDealApi, deleteDealsForContact as deleteDealsForContactApi } from '@/lib/supabase/deals';
+import { fetchDeals, createDeal as createDealApi, updateDeal as updateDealApi } from '@/lib/supabase/deals';
 import {
     DealTemplate,
     fetchDealTemplates,
@@ -26,7 +27,6 @@ import {
     createBooking as createBookingApi,
     updateBooking as updateBookingApi,
     deleteBooking as deleteBookingApi,
-    deleteBookingsForContact as deleteBookingsForContactApi,
     BookingRow,
 } from '@/lib/supabase/bookings';
 
@@ -34,6 +34,7 @@ interface AppContextType {
     contacts: Contact[];
     contactsLoading: boolean;
     contactsError: string | null;
+    clearContactsError: () => void;
     addContact: (contact: Contact) => Promise<Contact | null>;
     updateContact: (contact: Contact) => Promise<void>;
     deleteContact: (contactId: string) => Promise<void>;
@@ -72,6 +73,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
+    const { darkMode, toggleDarkMode } = useTheme();
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [contactsLoading, setContactsLoading] = useState(true);
     const [contactsError, setContactsError] = useState<string | null>(null);
@@ -85,7 +87,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [bookingsLoading, setBookingsLoading] = useState(true);
     const [bookingsError, setBookingsError] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
-    const [darkMode, setDarkMode] = useState(true);
     const [crmAction, setCrmAction] = useState<CRMActionRequest | undefined>(undefined);
 
     useEffect(() => {
@@ -218,16 +219,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         [bookingRows, getContactName]
     );
 
+    const clearContactsError = useCallback(() => setContactsError(null), []);
+
     const addContact = useCallback(
         async (contact: Contact): Promise<Contact | null> => {
-            if (!user?.id) return null;
+            if (!user?.id) throw new Error('Sign in to add contacts.');
             try {
                 const created = await createContact(user.id, contact);
-                setContacts(prev => [created, ...prev]);
+                setContacts(prev => [created, ...prev.filter(c => c.id !== created.id)]);
+                setContactsError(null);
                 return created;
             } catch (err) {
-                setContactsError(err instanceof Error ? err.message : 'Failed to add contact');
-                return null;
+                const message =
+                    err instanceof Error && err.message.trim()
+                        ? err.message
+                        : (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string'
+                            ? (err as { message: string }).message
+                            : 'Failed to add contact');
+                throw new Error(message);
             }
         },
         [user?.id]
@@ -240,8 +249,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 const updated = await updateContactApi(user.id, contact);
                 setContacts(prev => prev.map(c => (c.id === contact.id ? updated : c)));
             } catch (err) {
-                setContactsError(err instanceof Error ? err.message : 'Failed to update contact');
-                throw err;
+                const message =
+                    err instanceof Error && err.message.trim()
+                        ? err.message
+                        : (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string'
+                            ? (err as { message: string }).message
+                            : 'Failed to update contact');
+                throw new Error(message);
             }
         },
         [user?.id]
@@ -251,15 +265,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         async (contactId: string): Promise<void> => {
             if (!user?.id) return;
             try {
-                await deleteDealsForContactApi(user.id, contactId);
-                await deleteBookingsForContactApi(user.id, contactId);
                 await deleteContactApi(user.id, contactId);
                 setDeals(prev => prev.filter(d => d.contactId !== contactId));
                 setBookingRows(prev => prev.filter(r => r.contact_id !== contactId));
                 setContacts(prev => prev.filter(c => c.id !== contactId));
             } catch (err) {
-                setContactsError(err instanceof Error ? err.message : 'Failed to delete contact');
-                throw err;
+                const message =
+                    err instanceof Error && err.message.trim()
+                        ? err.message
+                        : (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string'
+                            ? (err as { message: string }).message
+                            : 'Failed to delete contact');
+                throw new Error(message);
             }
         },
         [user?.id]
@@ -429,7 +446,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             type: Appointment['type'];
             status?: Appointment['status'];
         }): Promise<Appointment | null> => {
-            if (!user?.id) return null;
+            if (!user?.id) throw new Error('Sign in to create a booking.');
             try {
                 const row = await createBookingApi(user.id, payload);
                 setBookingRows(prev => [...prev, row].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()));
@@ -445,8 +462,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     status: row.status as Appointment['status'],
                 };
             } catch (err) {
-                setBookingsError(err instanceof Error ? err.message : 'Failed to add booking');
-                return null;
+                throw err instanceof Error ? err : new Error('Failed to add booking');
             }
         },
         [user?.id, getContactName]
@@ -481,8 +497,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     })
                 );
             } catch (err) {
-                setBookingsError(err instanceof Error ? err.message : 'Failed to update booking');
-                throw err;
+                throw err instanceof Error ? err : new Error('Failed to update booking');
             }
         },
         []
@@ -493,12 +508,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             await deleteBookingApi(bookingId);
             setBookingRows(prev => prev.filter(r => r.id !== bookingId));
         } catch (err) {
-            setBookingsError(err instanceof Error ? err.message : 'Failed to delete booking');
-            throw err;
+            throw err instanceof Error ? err : new Error('Failed to delete booking');
         }
     }, []);
 
-    const toggleDarkMode = () => setDarkMode(prev => !prev);
     const unreadCount = notifications.filter(n => !n.read).length;
 
     return (
@@ -507,6 +520,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 contacts,
                 contactsLoading,
                 contactsError,
+                clearContactsError,
                 addContact,
                 updateContact,
                 deleteContact,

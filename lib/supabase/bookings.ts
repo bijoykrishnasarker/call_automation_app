@@ -42,7 +42,7 @@ export async function fetchBookings(userId: string): Promise<BookingRow[]> {
     .eq('user_id', userId)
     .order('start_at', { ascending: true });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Failed to load bookings');
   return (data ?? []) as BookingRow[];
 }
 
@@ -54,7 +54,7 @@ export function mapBookingsWithContactNames(
 }
 
 export async function createBooking(
-  userId: string,
+  _userId: string,
   payload: {
     contactId: string;
     title: string;
@@ -64,22 +64,52 @@ export async function createBooking(
     status?: Appointment['status'];
   }
 ): Promise<BookingRow> {
-  const { data, error } = await supabase
-    .from('bookings')
-    .insert({
-      user_id: userId,
-      contact_id: payload.contactId,
-      title: payload.title,
-      start_at: payload.startAt.toISOString(),
-      end_at: payload.endAt.toISOString(),
-      type: payload.type,
-      status: payload.status ?? 'Pending',
-    })
-    .select('*')
-    .single();
+  if (Number.isNaN(payload.startAt.getTime()) || Number.isNaN(payload.endAt.getTime())) {
+    throw new Error('Enter a valid date and time.');
+  }
+  if (payload.endAt.getTime() <= payload.startAt.getTime()) {
+    throw new Error('End time must be after start time.');
+  }
 
-  if (error) throw error;
-  return data as BookingRow;
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Sign in to create a booking.');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch('/api/bookings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        contactId: payload.contactId,
+        title: payload.title,
+        startAt: payload.startAt.toISOString(),
+        endAt: payload.endAt.toISOString(),
+        type: payload.type,
+        status: payload.status ?? 'Pending',
+      }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({})) as { booking?: BookingRow; message?: string };
+    if (!res.ok || !data.booking) {
+      throw new Error(data.message || 'Failed to create booking');
+    }
+    return data.booking;
+  } catch (err) {
+    if (
+      (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError')
+    ) {
+      throw new Error('Booking took too long. Please try again.');
+    }
+    throw err instanceof Error ? err : new Error('Failed to create booking');
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function updateBooking(
@@ -107,16 +137,16 @@ export async function updateBooking(
     .update({ ...updatePayload, updated_at: new Date().toISOString() })
     .eq('id', bookingId);
 
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Failed to update booking');
 }
 
 export async function deleteBooking(bookingId: string): Promise<void> {
   const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Failed to delete booking');
 }
 
 /** Removes all bookings for a contact (e.g. before deleting the contact; FK is restrict). */
 export async function deleteBookingsForContact(userId: string, contactId: string): Promise<void> {
   const { error } = await supabase.from('bookings').delete().eq('user_id', userId).eq('contact_id', contactId);
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Failed to delete bookings');
 }

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     .select('id, direction, from_number, to_number, status, started_at, ended_at, created_at, vapi_call_id, full_name, email, email_confirmed, needs_human_review, missing_fields, summary, caller_phone, requested_service, preferred_date, preferred_time, message, call_reason, transcript, contact_complete')
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(100);
 
   if (error) {
     console.error('[GET /api/calls]', error);
