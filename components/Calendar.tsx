@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Appointment, Contact, ContactStatus } from '@/types';
+import React, { useCallback, useState } from 'react';
+import { Appointment } from '@/types';
 import {
     calendarCellDateKey,
     dateTimeFromWallClock,
@@ -15,7 +15,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2, Loader2 } from 'lucide-react';
 
-import { formatContactOption } from '@/lib/contacts/format-contact-option';
+import { ContactSuggestInput, createContactFromTypedName } from '@/components/ui/ContactSuggestInput';
 
 function emptyNewBooking(date = getZonedDateKey(new Date())) {
     return {
@@ -26,10 +26,6 @@ function emptyNewBooking(date = getZonedDateKey(new Date())) {
         endTime: '10:00',
         type: 'Service' as const,
     };
-}
-
-function emptyQuickContact() {
-    return { firstName: '', lastName: '', phone: '', email: '' };
 }
 
 export const Calendar: React.FC = () => {
@@ -45,6 +41,10 @@ export const Calendar: React.FC = () => {
         updateBooking,
         deleteBooking,
     } = useApp();
+    const createContactForBooking = useCallback(
+        (name: string) => createContactFromTypedName(addContact, name),
+        [addContact]
+    );
     const isMobile = useMediaQuery('(max-width: 767px)');
 
     const [view, setView] = useState<'Day' | 'Week' | 'Month'>('Month');
@@ -55,7 +55,6 @@ export const Calendar: React.FC = () => {
     const [hoveredTooltipRect, setHoveredTooltipRect] = useState<{ left: number; top: number; width: number } | null>(null);
     const [editForm, setEditForm] = useState<{ title: string; contactId: string; date: string; startTime: string; endTime: string; type: Appointment['type']; status: Appointment['status'] } | null>(null);
     const [newBooking, setNewBooking] = useState(emptyNewBooking);
-    const [quickContact, setQuickContact] = useState(emptyQuickContact);
     const [bookingFormError, setBookingFormError] = useState<string | null>(null);
     const [isSavingBooking, setIsSavingBooking] = useState(false);
     const [editFormError, setEditFormError] = useState<string | null>(null);
@@ -101,47 +100,9 @@ export const Calendar: React.FC = () => {
 
     const openNewBookingModal = (date?: Date) => {
         setBookingFormError(null);
-        setQuickContact(emptyQuickContact());
-        const nextBooking = emptyNewBooking(date ? calendarCellDateKey(date) : getZonedDateKey(new Date()));
-        setNewBooking(nextBooking);
+        setNewBooking(emptyNewBooking(date ? calendarCellDateKey(date) : getZonedDateKey(new Date())));
         setIsModalOpen(true);
         void reloadContacts();
-    };
-
-    useEffect(() => {
-        if (!isModalOpen || contacts.length === 0) return;
-        setNewBooking(prev => (prev.contactId ? prev : { ...prev, contactId: contacts[0].id }));
-    }, [isModalOpen, contacts]);
-
-    const resolveBookingContactId = async (): Promise<string> => {
-        if (newBooking.contactId) return newBooking.contactId;
-
-        if (contacts.length === 0) {
-            const firstName = quickContact.firstName.trim();
-            if (!firstName) {
-                throw new Error('Enter a contact name, or add a lead in CRM first.');
-            }
-            const created = await addContact({
-                id: crypto.randomUUID(),
-                firstName,
-                lastName: quickContact.lastName.trim(),
-                email: quickContact.email.trim(),
-                phone: quickContact.phone.trim(),
-                company: '',
-                status: ContactStatus.NewLead,
-                tags: ['Booking'],
-                lastActivity: 'Just now',
-                source: 'Calendar Booking',
-                notes: [],
-                tasks: [],
-            });
-            if (!created?.id) {
-                throw new Error('Could not create contact. Try again or add a lead in CRM.');
-            }
-            return created.id;
-        }
-
-        throw new Error('Select a contact from your CRM.');
     };
 
     const handleSaveBooking = async (e: React.FormEvent) => {
@@ -154,12 +115,8 @@ export const Calendar: React.FC = () => {
             setBookingFormError('Enter a title.');
             return;
         }
-
-        let contactId: string;
-        try {
-            contactId = await resolveBookingContactId();
-        } catch (err) {
-            setBookingFormError(err instanceof Error ? err.message : 'Select a contact from your CRM.');
+        if (!newBooking.contactId) {
+            setBookingFormError('Type and select a contact, or add a new one from suggestions.');
             return;
         }
 
@@ -179,7 +136,7 @@ export const Calendar: React.FC = () => {
         setIsSavingBooking(true);
         try {
             const created = await addBooking({
-                contactId,
+                contactId: newBooking.contactId,
                 title,
                 startAt,
                 endAt,
@@ -957,20 +914,15 @@ export const Calendar: React.FC = () => {
 
                             <div>
                                 <label htmlFor="edit-booking-contact" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Contact</label>
-                                <select
+                                <ContactSuggestInput
                                     id="edit-booking-contact"
-                                    required
-                                    value={editForm.contactId}
-                                    onChange={e => setEditForm(prev => prev ? { ...prev, contactId: e.target.value } : null)}
-                                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                                >
-                                    <option value="">Select a contact...</option>
-                                    {contacts.map(contact => (
-                                        <option key={contact.id} value={contact.id}>
-                                            {formatContactOption(contact)}
-                                        </option>
-                                    ))}
-                                </select>
+                                    contacts={contacts}
+                                    contactId={editForm.contactId}
+                                    onContactIdChange={id => setEditForm(prev => prev ? { ...prev, contactId: id } : null)}
+                                    onCreateContact={createContactForBooking}
+                                    loading={contactsLoading}
+                                    disabled={isSavingEdit}
+                                />
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1106,73 +1058,19 @@ export const Calendar: React.FC = () => {
 
                             <div>
                                 <label htmlFor="new-booking-contact" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Contact</label>
-                                {contactsLoading ? (
-                                    <p className="text-sm text-zinc-500">Loading contacts…</p>
-                                ) : contacts.length > 0 ? (
-                                    <select
-                                        id="new-booking-contact"
-                                        required
-                                        value={newBooking.contactId}
-                                        onChange={e => setNewBooking({ ...newBooking, contactId: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                                    >
-                                        <option value="">Select a contact...</option>
-                                        {contacts.map(contact => (
-                                            <option key={contact.id} value={contact.id}>
-                                                {formatContactOption(contact)}
-                                            </option>
-                                        ))}
-                                    </select>
-                                ) : (
-                                    <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-                                        <p className="text-xs text-amber-200">
-                                            No CRM contacts yet. Enter client details below — we&apos;ll save them and book the appointment.
-                                        </p>
-                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                            <div className="sm:col-span-2">
-                                                <label htmlFor="quick-contact-first-name" className="mb-1 block text-[10px] font-bold uppercase text-zinc-400">First Name</label>
-                                                <input
-                                                    id="quick-contact-first-name"
-                                                    type="text"
-                                                    required
-                                                    value={quickContact.firstName}
-                                                    onChange={e => setQuickContact(prev => ({ ...prev, firstName: e.target.value }))}
-                                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label htmlFor="quick-contact-last-name" className="mb-1 block text-[10px] font-bold uppercase text-zinc-400">Last Name</label>
-                                                <input
-                                                    id="quick-contact-last-name"
-                                                    type="text"
-                                                    value={quickContact.lastName}
-                                                    onChange={e => setQuickContact(prev => ({ ...prev, lastName: e.target.value }))}
-                                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label htmlFor="quick-contact-phone" className="mb-1 block text-[10px] font-bold uppercase text-zinc-400">Phone</label>
-                                                <input
-                                                    id="quick-contact-phone"
-                                                    type="tel"
-                                                    value={quickContact.phone}
-                                                    onChange={e => setQuickContact(prev => ({ ...prev, phone: e.target.value }))}
-                                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                                                />
-                                            </div>
-                                            <div className="sm:col-span-2">
-                                                <label htmlFor="quick-contact-email" className="mb-1 block text-[10px] font-bold uppercase text-zinc-400">Email</label>
-                                                <input
-                                                    id="quick-contact-email"
-                                                    type="email"
-                                                    value={quickContact.email}
-                                                    onChange={e => setQuickContact(prev => ({ ...prev, email: e.target.value }))}
-                                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                <ContactSuggestInput
+                                    id="new-booking-contact"
+                                    contacts={contacts}
+                                    contactId={newBooking.contactId}
+                                    onContactIdChange={id => setNewBooking(prev => ({ ...prev, contactId: id }))}
+                                    onCreateContact={createContactForBooking}
+                                    loading={contactsLoading}
+                                    disabled={isSavingBooking}
+                                    placeholder="Type name, phone, or email for suggestions…"
+                                />
+                                <p className="mt-1.5 text-[11px] text-zinc-500">
+                                    Type to search CRM contacts. Pick a suggestion or add a new contact from the list.
+                                </p>
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
