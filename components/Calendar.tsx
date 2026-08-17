@@ -16,6 +16,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, CheckCircle, X, Calendar as CalendarIcon, Trash2, Loader2 } from 'lucide-react';
 
 import { ContactSuggestInput } from '@/components/ui/ContactSuggestInput';
+import { TimeAmPmInput } from '@/components/ui/TimeAmPmInput';
 import { createContactFromTypedQuery, resolveContactIdFromQuery } from '@/lib/contacts/resolve-contact-query';
 
 function emptyNewBooking(date = getZonedDateKey(new Date())) {
@@ -985,24 +986,20 @@ export const Calendar: React.FC = () => {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
                                     <label htmlFor="edit-booking-start-time" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Start Time</label>
-                                    <input
+                                    <TimeAmPmInput
                                         id="edit-booking-start-time"
-                                        required
-                                        type="time"
                                         value={editForm.startTime}
-                                        onChange={e => setEditForm(prev => prev ? { ...prev, startTime: e.target.value } : null)}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                        onChange={startTime => setEditForm(prev => prev ? { ...prev, startTime } : null)}
+                                        disabled={isSavingEdit}
                                     />
                                 </div>
                                 <div>
                                     <label htmlFor="edit-booking-end-time" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">End Time</label>
-                                    <input
+                                    <TimeAmPmInput
                                         id="edit-booking-end-time"
-                                        required
-                                        type="time"
                                         value={editForm.endTime}
-                                        onChange={e => setEditForm(prev => prev ? { ...prev, endTime: e.target.value } : null)}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                        onChange={endTime => setEditForm(prev => prev ? { ...prev, endTime } : null)}
+                                        disabled={isSavingEdit}
                                     />
                                 </div>
                             </div>
@@ -1117,24 +1114,20 @@ export const Calendar: React.FC = () => {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
                                     <label htmlFor="new-booking-start-time" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Start Time</label>
-                                    <input
+                                    <TimeAmPmInput
                                         id="new-booking-start-time"
-                                        required
-                                        type="time"
                                         value={newBooking.startTime}
-                                        onChange={e => setNewBooking({ ...newBooking, startTime: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                        onChange={startTime => setNewBooking({ ...newBooking, startTime })}
+                                        disabled={isSavingBooking}
                                     />
                                 </div>
                                 <div>
                                     <label htmlFor="new-booking-end-time" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">End Time</label>
-                                    <input
+                                    <TimeAmPmInput
                                         id="new-booking-end-time"
-                                        required
-                                        type="time"
                                         value={newBooking.endTime}
-                                        onChange={e => setNewBooking({ ...newBooking, endTime: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                        onChange={endTime => setNewBooking({ ...newBooking, endTime })}
+                                        disabled={isSavingBooking}
                                     />
                                 </div>
                             </div>
