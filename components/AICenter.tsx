@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Mic, MessageSquare, Save, Play, Upload, FileText, CheckCircle, Smartphone, Star, Volume2, Clock, Trash2, Sliders, Square, Loader2, Sparkles, Headphones, Plus } from 'lucide-react';
+import { Mic, MessageSquare, Save, Play, Upload, FileText, CheckCircle, Smartphone, Star, Volume2, Clock, Trash2, Sliders, Square, Loader2, Sparkles, Headphones, Plus, X } from 'lucide-react';
 import Vapi from '@vapi-ai/web';
 import { AIReviewConfig, AIChatConfig } from '@/types';
 import { supabase } from '@/lib/supabase/client';
@@ -152,8 +152,10 @@ export const AICenter: React.FC = () => {
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [isSyncingAssistant, setIsSyncingAssistant] = useState(false);
     const [isProvisioningPhone, setIsProvisioningPhone] = useState(false);
-    const [isLinkingAssistantToPhone, setIsLinkingAssistantToPhone] = useState(false);
     const [calls, setCalls] = useState<any[]>([]);
+    const [reviewCall, setReviewCall] = useState<any | null>(null);
+    const [reviewForm, setReviewForm] = useState({ fullName: '', phone: '', email: '', message: '', requestedService: '' });
+    const [isSavingReview, setIsSavingReview] = useState(false);
 
     // Simulated State for Reviews AI
     const [reviewConfig, setReviewConfig] = useState<AIReviewConfig>({
@@ -430,6 +432,64 @@ export const AICenter: React.FC = () => {
         loadRecentCalls();
     }, [loadRecentCalls]);
 
+    const openCallReview = useCallback((call: any) => {
+        setReviewCall(call);
+        setReviewForm({
+            fullName: call.full_name || '',
+            phone: call.caller_phone || call.from_number || '',
+            email: call.email || '',
+            message: call.message || call.summary || '',
+            requestedService: call.requested_service || '',
+        });
+        setError(null);
+        setSuccessMessage(null);
+    }, []);
+
+    const handleSaveCallReview = useCallback(async () => {
+        if (!reviewCall?.id) return;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+            setError('Sign in to save this review.');
+            return;
+        }
+        setIsSavingReview(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/calls', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    id: reviewCall.id,
+                    fullName: reviewForm.fullName,
+                    phone: reviewForm.phone,
+                    email: reviewForm.email,
+                    message: reviewForm.message,
+                    requestedService: reviewForm.requestedService,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setError((data as { message?: string }).message ?? 'Failed to save review');
+                return;
+            }
+            const saved = (data as { call?: any }).call;
+            if (saved) {
+                setCalls((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)));
+            }
+            setReviewCall(null);
+            setSuccessMessage('Call reviewed. Contact saved to CRM when name and phone/email were provided.');
+            setTimeout(() => setSuccessMessage(null), 4000);
+            loadRecentCalls();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Failed to save review');
+        } finally {
+            setIsSavingReview(false);
+        }
+    }, [loadRecentCalls, reviewCall, reviewForm]);
+
     /** Same as Save: writes Supabase first, then `/api/vapi/sync` (full prompt + MCP). Avoids `/api/vapi/assistants/sync`, which requires an existing row and omits services/greeting. */
     const handleSyncAssistant = useCallback(async () => {
         setError(null);
@@ -499,7 +559,7 @@ export const AICenter: React.FC = () => {
                 const linkErr = (data as { linkError?: string }).linkError;
                 if (warn) {
                     setError(
-                        `${warn}${linkErr ? ` Technical detail: ${linkErr}` : ''} You can try “Link assistant to number” after Save / Sync with Vapi.`
+                        `${warn}${linkErr ? ` Technical detail: ${linkErr}` : ''} Try Save / Sync with Vapi, then provision again.`
                     );
                 } else {
                     setSuccessMessage(
@@ -514,36 +574,6 @@ export const AICenter: React.FC = () => {
             setError('Something went wrong. Please try again or contact support.');
         } finally {
             setIsProvisioningPhone(false);
-        }
-    }, []);
-
-    const handleLinkAssistantToPhone = useCallback(async () => {
-        setError(null);
-        setSuccessMessage(null);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-            setError('Authentication required');
-            return;
-        }
-        setIsLinkingAssistantToPhone(true);
-        try {
-            const res = await fetch('/api/vapi/phone/link-assistant', {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                setError((data as { message?: string }).message ?? 'Failed to link assistant to phone number');
-            } else {
-                setSuccessMessage((data as { message?: string }).message ?? 'Phone number linked to your assistant.');
-                setTimeout(() => setSuccessMessage(null), 5000);
-            }
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to link assistant');
-        } finally {
-            setIsLinkingAssistantToPhone(false);
         }
     }, []);
 
@@ -1130,21 +1160,6 @@ export const AICenter: React.FC = () => {
                                             >
                                                 {isProvisioningPhone ? 'Generating…' : 'Provision Phone Number'}
                                             </button>
-                                            {formData.phoneNumber?.trim() ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={handleLinkAssistantToPhone}
-                                                    disabled={
-                                                        isSaving ||
-                                                        isLinkingAssistantToPhone ||
-                                                        isSyncingAssistant
-                                                    }
-                                                    className="rounded-lg border border-zinc-700 bg-[#111113] px-4 py-2 text-sm font-medium text-white hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-                                                    title="If Vapi shows the wrong assistant for this number, run Save or Sync first, then click here."
-                                                >
-                                                    {isLinkingAssistantToPhone ? 'Linking…' : 'Link assistant to number'}
-                                                </button>
-                                            ) : null}
                                         </div>
                                         <div className="flex flex-col gap-2">
                                             <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Connected Phone Number</label>
@@ -1265,9 +1280,17 @@ export const AICenter: React.FC = () => {
                                                                 <span className="text-red-500 font-bold">No structured data</span>
                                                             )}
                                                         </div>
-                                                        {needsReview && (
-                                                            <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
+                                                        {needsReview ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openCallReview(call)}
+                                                                className="rounded bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 hover:bg-amber-200"
+                                                            >
                                                                 Needs Review
+                                                            </button>
+                                                        ) : (
+                                                            <span className="rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                                                                Reviewed
                                                             </span>
                                                         )}
                                                     </div>
@@ -1452,6 +1475,97 @@ export const AICenter: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {reviewCall && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !isSavingReview && setReviewCall(null)}>
+                    <div
+                        className="w-full max-w-lg rounded-xl border border-zinc-800 bg-[#141416] p-5 shadow-xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-white">Review call</h3>
+                                <p className="mt-1 text-xs text-zinc-500">
+                                    Fill in what the AI missed. Saving marks this call reviewed and adds a contact when name plus phone or email is set.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => !isSavingReview && setReviewCall(null)}
+                                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-white"
+                                aria-label="Close review"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <p className="mb-4 text-xs text-zinc-500">
+                            {reviewCall.from_number || reviewCall.caller_phone || 'Unknown number'} · {reviewCall.status || 'unknown'} · {reviewCall.created_at ? new Date(reviewCall.created_at).toLocaleString() : ''}
+                        </p>
+                        {(reviewCall.summary || reviewCall.transcript) && (
+                            <div className="mb-4 max-h-28 overflow-y-auto rounded-lg border border-zinc-800 bg-black p-3 text-xs text-zinc-400">
+                                {reviewCall.summary || reviewCall.transcript}
+                            </div>
+                        )}
+                        <div className="space-y-3">
+                            <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Full name</label>
+                                <input
+                                    value={reviewForm.fullName}
+                                    onChange={(e) => setReviewForm({ ...reviewForm, fullName: e.target.value })}
+                                    className="w-full rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50"
+                                    placeholder="Caller name"
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Phone</label>
+                                <input
+                                    value={reviewForm.phone}
+                                    onChange={(e) => setReviewForm({ ...reviewForm, phone: e.target.value })}
+                                    className="w-full rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50"
+                                    placeholder="+880..."
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Email</label>
+                                <input
+                                    value={reviewForm.email}
+                                    onChange={(e) => setReviewForm({ ...reviewForm, email: e.target.value })}
+                                    className="w-full rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50"
+                                    placeholder="name@email.com"
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Service / notes</label>
+                                <textarea
+                                    value={reviewForm.message}
+                                    onChange={(e) => setReviewForm({ ...reviewForm, message: e.target.value })}
+                                    className="min-h-[72px] w-full rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50"
+                                    placeholder="What they asked for"
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setReviewCall(null)}
+                                disabled={isSavingReview}
+                                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-white/[0.04] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveCallReview}
+                                disabled={isSavingReview}
+                                className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400 disabled:opacity-50"
+                            >
+                                {isSavingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                {isSavingReview ? 'Saving…' : 'Save & mark reviewed'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

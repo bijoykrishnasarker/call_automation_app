@@ -451,7 +451,7 @@ export async function POST(request: NextRequest) {
     ...(linkFailed
       ? {
           warning:
-            'Number purchased and saved, but linking to your assistant failed. Use "Link assistant to number" in AI Center or set the assistant in the Vapi dashboard.',
+            'Number purchased and saved, but linking to your assistant failed. Try Save / Sync with Vapi, then provision again.',
           linkError: linkFailed,
         }
       : {}),
